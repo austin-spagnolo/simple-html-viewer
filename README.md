@@ -32,6 +32,25 @@ npm run check
 
 Press `F5` in VS Code to launch an Extension Development Host.
 
+## Manual QA
+
+Use [test/user-test.html](/C:/Users/austi/Documents/Git/html-viewer/test/user-test.html) as the baseline test page.
+
+- Open the preview from the command palette, editor title, explorer context menu, and `Open With...`.
+- Verify the counter button increments without reloading the page.
+- Verify clicking sortable table headers reorders rows.
+- Verify the Plotly chart renders and remains interactive.
+- Verify zoom `-`, `+`, and `reset` update the preview independently of VS Code app zoom.
+- Set `simpleHtmlViewer.autoRefresh` to `onSave`, save the HTML file, and verify the preview updates automatically.
+- Set `simpleHtmlViewer.autoRefresh` to `off`, save the file, confirm no automatic update occurs, then click `refresh` and confirm the preview updates.
+- Repeat the same checks in a Remote-SSH workspace.
+
+## Known Limitations
+
+- Very wide or fixed-width HTML documents may still require horizontal scrolling at larger zoom levels.
+- Aggressive page-level CSS may affect the injected preview toolbar because the toolbar lives in the same document as the previewed HTML.
+- The current zoom model is optimized for Chromium-based VS Code webviews and may render some third-party widgets slightly differently than a standalone browser.
+
 ## Publishing
 
 ```bash
@@ -42,6 +61,7 @@ npm run package
 Before publishing:
 
 - Replace the placeholder `publisher`, `repository`, `homepage`, and `bugs` values in `package.json`.
-- Add a real extension icon at `media/icon.png`.
+- Add a real extension icon and wire it into `package.json`.
 - Create a VS Code Marketplace publisher and authentication token.
-
+- Push the repository to GitHub and enable the included CI workflow.
+- Package a `.vsix` locally and install it once as a final smoke test.
