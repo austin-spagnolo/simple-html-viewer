@@ -1,0 +1,79 @@
+:root {
+  color-scheme: light dark;
+  --background: var(--vscode-editor-background);
+  --border: var(--vscode-panel-border);
+  --button-bg: var(--vscode-button-secondaryBackground);
+  --button-fg: var(--vscode-button-secondaryForeground);
+  --button-hover: var(--vscode-button-secondaryHoverBackground);
+  --label-bg: var(--vscode-input-background);
+  --label-fg: var(--vscode-input-foreground);
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+  background: var(--background);
+  color: var(--label-fg);
+  font-family:
+    var(--vscode-font-family),
+    sans-serif;
+}
+
+.app-shell {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  height: 100%;
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.toolbar-button {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--button-bg);
+  color: var(--button-fg);
+  min-width: 36px;
+  height: 32px;
+  padding: 0 10px;
+  cursor: pointer;
+}
+
+.toolbar-button:hover {
+  background: var(--button-hover);
+}
+
+.zoom-label {
+  min-width: 64px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--label-bg);
+}
+
+.frame-wrap {
+  position: relative;
+  overflow: auto;
+  background: #fff;
+}
+
+#preview-frame {
+  display: block;
+  border: 0;
+  transform-origin: top left;
+  background: #fff;
+}
+
+.hidden {
+  display: none;
+}
+
