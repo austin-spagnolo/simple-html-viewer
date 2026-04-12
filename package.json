@@ -1,0 +1,115 @@
+{
+  "name": "simple-html-viewer",
+  "displayName": "Simple HTML Viewer",
+  "description": "A minimal VS Code HTML viewer with interactive webview rendering and independent zoom controls.",
+  "version": "0.0.1",
+  "publisher": "your-publisher",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/your-org/simple-html-viewer.git"
+  },
+  "homepage": "https://github.com/your-org/simple-html-viewer#readme",
+  "bugs": {
+    "url": "https://github.com/your-org/simple-html-viewer/issues"
+  },
+  "engines": {
+    "vscode": "^1.98.0"
+  },
+  "categories": ["Other"],
+  "keywords": ["html", "preview", "webview", "plotly", "javascript"],
+  "main": "./dist/extension.js",
+  "activationEvents": [
+    "onCommand:simpleHtmlViewer.openPreview",
+    "onCustomEditor:simpleHtmlViewer.preview"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "simpleHtmlViewer.openPreview",
+        "title": "Simple HTML Viewer: Open Preview",
+        "category": "Simple HTML Viewer"
+      },
+      {
+        "command": "simpleHtmlViewer.refreshPreview",
+        "title": "Simple HTML Viewer: Refresh Preview",
+        "category": "Simple HTML Viewer"
+      }
+    ],
+    "configuration": {
+      "title": "Simple HTML Viewer",
+      "properties": {
+        "simpleHtmlViewer.autoRefresh": {
+          "type": "string",
+          "enum": ["onSave", "off"],
+          "default": "onSave",
+          "markdownDescription": "Controls when the HTML preview refreshes automatically. When set to `off`, the preview shows a toolbar refresh button."
+        },
+        "simpleHtmlViewer.zoomStep": {
+          "type": "number",
+          "default": 10,
+          "minimum": 1,
+          "maximum": 50,
+          "description": "Zoom increment, in percent, used by the preview toolbar."
+        },
+        "simpleHtmlViewer.defaultZoom": {
+          "type": "number",
+          "default": 100,
+          "minimum": 10,
+          "maximum": 500,
+          "description": "Default zoom percentage for new previews."
+        }
+      }
+    },
+    "menus": {
+      "explorer/context": [
+        {
+          "command": "simpleHtmlViewer.openPreview",
+          "when": "resourceExtname == .html || resourceExtname == .htm",
+          "group": "navigation"
+        }
+      ],
+      "editor/title": [
+        {
+          "command": "simpleHtmlViewer.openPreview",
+          "when": "resourceExtname == .html || resourceExtname == .htm",
+          "group": "navigation"
+        }
+      ]
+    },
+    "customEditors": [
+      {
+        "viewType": "simpleHtmlViewer.preview",
+        "displayName": "Simple HTML Viewer",
+        "selector": [
+          {
+            "filenamePattern": "*.html"
+          },
+          {
+            "filenamePattern": "*.htm"
+          }
+        ],
+        "priority": "option"
+      }
+    ]
+  },
+  "scripts": {
+    "build": "tsc -p ./",
+    "check": "npm run lint && npm run build",
+    "format": "prettier --write .",
+    "lint": "eslint \"src/**/*.ts\"",
+    "package": "vsce package",
+    "vscode:prepublish": "npm run build"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.10",
+    "@types/vscode": "^1.98.0",
+    "@typescript-eslint/eslint-plugin": "^8.26.1",
+    "@typescript-eslint/parser": "^8.26.1",
+    "eslint": "^9.22.0",
+    "eslint-config-prettier": "^10.0.1",
+    "prettier": "^3.5.3",
+    "typescript": "^5.8.2",
+    "@vscode/vsce": "^3.2.2"
+  }
+}
