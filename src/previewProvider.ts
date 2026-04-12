@@ -5,12 +5,11 @@ import * as vscode from 'vscode';
 type AutoRefreshMode = 'onSave' | 'off';
 
 type WebviewMessage =
-  | { type: 'ready' }
   | { type: 'zoomIn' }
   | { type: 'zoomOut' }
   | { type: 'zoomReset' }
   | { type: 'manualRefresh' }
-  | { type: 'zoomChanged'; zoom: number };
+  | { type: 'ready' };
 
 export class HtmlPreviewProvider implements vscode.CustomReadonlyEditorProvider {
   public static readonly viewType = 'simpleHtmlViewer.preview';
@@ -37,35 +36,35 @@ export class HtmlPreviewProvider implements vscode.CustomReadonlyEditorProvider 
     webviewPanel: vscode.WebviewPanel,
   ): Promise<void> {
     const resourceRoot = vscode.Uri.joinPath(document.uri, '..');
+    const extensionMediaRoot = vscode.Uri.joinPath(
+      this.context.extensionUri,
+      'media',
+    );
     webviewPanel.webview.options = {
       enableScripts: true,
-      localResourceRoots: [resourceRoot],
+      localResourceRoots: [resourceRoot, extensionMediaRoot],
     };
     webviewPanel.title = `${path.basename(document.uri.fsPath)} Preview`;
-    webviewPanel.webview.html = this.getWebviewHtml(webviewPanel.webview);
 
     this.registerPanel(document.uri, webviewPanel);
 
     webviewPanel.webview.onDidReceiveMessage(async (message: WebviewMessage) => {
       switch (message.type) {
-        case 'ready':
         case 'manualRefresh':
           await this.renderDocument(webviewPanel, document.uri);
           break;
         case 'zoomIn':
-          await this.adjustZoom(webviewPanel, 1);
+          await this.adjustZoom(webviewPanel, document.uri, 1);
           break;
         case 'zoomOut':
-          await this.adjustZoom(webviewPanel, -1);
+          await this.adjustZoom(webviewPanel, document.uri, -1);
           break;
         case 'zoomReset':
-          await this.setZoom(webviewPanel, this.getDefaultZoom());
+          await this.setZoom(document.uri, this.getDefaultZoom());
+          await this.sendZoom(webviewPanel, document.uri);
           break;
-        case 'zoomChanged':
-          await this.context.workspaceState.update(
-            this.zoomStateKey(document.uri),
-            message.zoom,
-          );
+        case 'ready':
+          await this.sendZoom(webviewPanel, document.uri);
           break;
         default:
           break;
@@ -75,6 +74,8 @@ export class HtmlPreviewProvider implements vscode.CustomReadonlyEditorProvider 
     webviewPanel.onDidDispose(() => {
       this.unregisterPanel(document.uri, webviewPanel);
     });
+
+    await this.renderDocument(webviewPanel, document.uri);
   }
 
   public handleDocumentSaved(document: vscode.TextDocument): void {
@@ -131,29 +132,21 @@ export class HtmlPreviewProvider implements vscode.CustomReadonlyEditorProvider 
   ): Promise<void> {
     const bytes = await vscode.workspace.fs.readFile(documentUri);
     const sourceHtml = new TextDecoder('utf-8').decode(bytes);
-    const directoryUri = vscode.Uri.joinPath(documentUri, '..');
-    const baseHref = this.ensureTrailingSlash(
-      panel.webview.asWebviewUri(directoryUri).toString(),
-    );
     const zoom = this.getStoredZoom(documentUri);
-
-    await panel.webview.postMessage({
-      type: 'render',
-      html: this.withBaseHref(sourceHtml, baseHref),
-      autoRefresh: this.getAutoRefreshMode(),
+    panel.webview.html = this.getWebviewHtml(
+      panel.webview,
+      documentUri,
+      sourceHtml,
       zoom,
-    });
+      this.getAutoRefreshMode(),
+    );
   }
 
   private async adjustZoom(
     panel: vscode.WebviewPanel,
+    uri: vscode.Uri,
     direction: 1 | -1,
   ): Promise<void> {
-    const uri = this.findUriForPanel(panel);
-    if (!uri) {
-      return;
-    }
-
     const nextZoom = Math.max(
       10,
       Math.min(
@@ -161,33 +154,25 @@ export class HtmlPreviewProvider implements vscode.CustomReadonlyEditorProvider 
         this.getStoredZoom(uri) + direction * this.getZoomStep(),
       ),
     );
-    await this.setZoom(panel, nextZoom, uri);
+    await this.setZoom(uri, nextZoom);
+    await this.sendZoom(panel, uri);
   }
 
   private async setZoom(
-    panel: vscode.WebviewPanel,
+    uri: vscode.Uri,
     zoom: number,
-    uri = this.findUriForPanel(panel),
   ): Promise<void> {
-    if (!uri) {
-      return;
-    }
-
     await this.context.workspaceState.update(this.zoomStateKey(uri), zoom);
-    await panel.webview.postMessage({
-      type: 'setZoom',
-      zoom,
-    });
   }
 
-  private findUriForPanel(panel: vscode.WebviewPanel): vscode.Uri | undefined {
-    for (const [key, panels] of this.panels.entries()) {
-      if (panels.has(panel)) {
-        return vscode.Uri.parse(key);
-      }
-    }
-
-    return undefined;
+  private async sendZoom(
+    panel: vscode.WebviewPanel,
+    uri: vscode.Uri,
+  ): Promise<void> {
+    await panel.webview.postMessage({
+      type: 'setZoom',
+      zoom: this.getStoredZoom(uri),
+    });
   }
 
   private panelKey(uri: vscode.Uri): string {
@@ -223,102 +208,162 @@ export class HtmlPreviewProvider implements vscode.CustomReadonlyEditorProvider 
       .get<number>('defaultZoom', 100);
   }
 
-  private withBaseHref(html: string, baseHref: string): string {
-    const baseTag = `<base href="${baseHref}">`;
+  private prepareHtmlForPreview(
+    webview: vscode.Webview,
+    documentUri: vscode.Uri,
+    html: string,
+  ): string {
+    const previewCsp = [
+      `default-src 'none';`,
+      `img-src ${webview.cspSource} data: blob: https: http:;`,
+      `style-src ${webview.cspSource} 'unsafe-inline' https: http:;`,
+      `script-src ${webview.cspSource} 'unsafe-inline' 'unsafe-eval' https: http:;`,
+      `font-src ${webview.cspSource} data: blob: https: http:;`,
+      `connect-src ${webview.cspSource} data: blob: https: http: ws: wss:;`,
+      `worker-src ${webview.cspSource} data: blob: https: http:;`,
+    ].join(' ');
+
+    const withCsp = this.injectIntoHead(
+      html,
+      `<meta http-equiv="Content-Security-Policy" content="${previewCsp}">`,
+    );
+
+    return withCsp.replace(
+      /\b(href|src)=("([^"]*)"|'([^']*)')/gi,
+      (
+        fullMatch,
+        attribute: string,
+        quoted: string,
+        doubleQuoted: string | undefined,
+        singleQuoted: string | undefined,
+      ) => {
+        const rawValue = doubleQuoted ?? singleQuoted ?? '';
+        if (!this.shouldRewriteResourceUrl(rawValue)) {
+          return fullMatch;
+        }
+
+        const resolvedUri = vscode.Uri.joinPath(
+          vscode.Uri.joinPath(documentUri, '..'),
+          rawValue,
+        );
+        const rewrittenUri = webview.asWebviewUri(resolvedUri).toString();
+        const quote = quoted.startsWith('"') ? '"' : "'";
+        return `${attribute}=${quote}${rewrittenUri}${quote}`;
+      },
+    );
+  }
+
+  private injectIntoHead(html: string, tag: string): string {
     if (/<head(\s[^>]*)?>/i.test(html)) {
-      return html.replace(/<head(\s[^>]*)?>/i, (match) => `${match}${baseTag}`);
+      return html.replace(/<head(\s[^>]*)?>/i, (match) => `${match}${tag}`);
     }
 
-    return `<!DOCTYPE html><html><head>${baseTag}</head><body>${html}</body></html>`;
+    return `<!DOCTYPE html><html><head>${tag}</head><body>${html}</body></html>`;
   }
 
-  private ensureTrailingSlash(value: string): string {
-    return value.endsWith('/') ? value : `${value}/`;
+  private shouldRewriteResourceUrl(value: string): boolean {
+    if (!value) {
+      return false;
+    }
+
+    const lowerValue = value.toLowerCase();
+    return !(
+      lowerValue.startsWith('http://') ||
+      lowerValue.startsWith('https://') ||
+      lowerValue.startsWith('data:') ||
+      lowerValue.startsWith('blob:') ||
+      lowerValue.startsWith('#') ||
+      lowerValue.startsWith('mailto:') ||
+      lowerValue.startsWith('javascript:')
+    );
   }
 
-  private getWebviewHtml(webview: vscode.Webview): string {
+  private getWebviewHtml(
+    webview: vscode.Webview,
+    documentUri: vscode.Uri,
+    sourceHtml: string,
+    zoom: number,
+    autoRefreshMode: AutoRefreshMode,
+  ): string {
     const nonce = this.createNonce();
     const stylesUri = webview.asWebviewUri(
       vscode.Uri.joinPath(this.context.extensionUri, 'media', 'preview.css'),
     );
-
-    return `<!DOCTYPE html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8">
-    <meta
-      http-equiv="Content-Security-Policy"
-      content="default-src 'none'; style-src ${webview.cspSource}; script-src 'nonce-${nonce}'; frame-src 'self' data: blob: https: ${webview.cspSource};"
-    >
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link href="${stylesUri}" rel="stylesheet">
-    <title>Simple HTML Viewer</title>
-  </head>
-  <body>
-    <div class="app-shell">
-      <div class="toolbar">
-        <button id="zoom-out" class="toolbar-button" type="button" aria-label="Zoom out">-</button>
-        <div id="zoom-label" class="zoom-label">100%</div>
-        <button id="zoom-in" class="toolbar-button" type="button" aria-label="Zoom in">+</button>
-        <button id="zoom-reset" class="toolbar-button" type="button">reset</button>
-        <button id="refresh" class="toolbar-button hidden" type="button">refresh</button>
-      </div>
-      <div class="frame-wrap">
-        <iframe
-          id="preview-frame"
-          sandbox="allow-same-origin allow-scripts allow-forms allow-modals allow-pointer-lock allow-downloads"
-          referrerpolicy="no-referrer"
-          title="HTML preview"
-        ></iframe>
-      </div>
+    const preparedHtml = this.prepareHtmlForPreview(
+      webview,
+      documentUri,
+      sourceHtml,
+    );
+    const toolbarStart = `
+<div id="simple-html-viewer-root">
+  <div id="simple-html-viewer-toolbar" data-simple-html-viewer-toolbar>
+    <button id="simple-html-viewer-zoom-out" class="simple-html-viewer-button" type="button" aria-label="Zoom out">-</button>
+    <div id="simple-html-viewer-zoom-label" class="simple-html-viewer-zoom-label">${zoom}%</div>
+    <button id="simple-html-viewer-zoom-in" class="simple-html-viewer-button" type="button" aria-label="Zoom in">+</button>
+    <button id="simple-html-viewer-zoom-reset" class="simple-html-viewer-button" type="button">reset</button>
+    <button id="simple-html-viewer-refresh" class="simple-html-viewer-button${
+      autoRefreshMode === 'off' ? '' : ' hidden'
+    }" type="button">refresh</button>
+  </div>
+  <div id="simple-html-viewer-scroll">
+    <div id="simple-html-viewer-content" data-simple-html-viewer-content>
+`;
+    const toolbarEnd = `
     </div>
-    <script nonce="${nonce}">
-      const vscode = acquireVsCodeApi();
-      const frame = document.getElementById('preview-frame');
-      const refreshButton = document.getElementById('refresh');
-      const zoomLabel = document.getElementById('zoom-label');
+  </div>
+</div>
+<script nonce="${nonce}">
+  const vscode = acquireVsCodeApi();
+  const content = document.getElementById('simple-html-viewer-content');
+  const zoomLabel = document.getElementById('simple-html-viewer-zoom-label');
+  const applyZoom = () => {
+    content.style.zoom = '${zoom / 100}';
+    zoomLabel.textContent = '${zoom}%';
+  };
 
-      const applyZoom = (zoom) => {
-        frame.style.width = \`\${10000 / zoom}%\`;
-        frame.style.height = \`\${10000 / zoom}%\`;
-        frame.style.transform = \`scale(\${zoom / 100})\`;
-        zoomLabel.textContent = \`\${zoom}%\`;
-        vscode.postMessage({ type: 'zoomChanged', zoom });
-      };
+  document.getElementById('simple-html-viewer-zoom-out')?.addEventListener('click', () => {
+    vscode.postMessage({ type: 'zoomOut' });
+  });
 
-      document.getElementById('zoom-out').addEventListener('click', () => {
-        vscode.postMessage({ type: 'zoomOut' });
-      });
+  document.getElementById('simple-html-viewer-zoom-in')?.addEventListener('click', () => {
+    vscode.postMessage({ type: 'zoomIn' });
+  });
 
-      document.getElementById('zoom-in').addEventListener('click', () => {
-        vscode.postMessage({ type: 'zoomIn' });
-      });
+  document.getElementById('simple-html-viewer-zoom-reset')?.addEventListener('click', () => {
+    vscode.postMessage({ type: 'zoomReset' });
+  });
 
-      document.getElementById('zoom-reset').addEventListener('click', () => {
-        vscode.postMessage({ type: 'zoomReset' });
-      });
+  document.getElementById('simple-html-viewer-refresh')?.addEventListener('click', () => {
+    vscode.postMessage({ type: 'manualRefresh' });
+  });
 
-      refreshButton.addEventListener('click', () => {
-        vscode.postMessage({ type: 'manualRefresh' });
-      });
+  window.addEventListener('message', (event) => {
+    const message = event.data;
+    if (message?.type === 'setZoom') {
+      content.style.zoom = String(message.zoom / 100);
+      zoomLabel.textContent = message.zoom + '%';
+    }
+  });
 
-      window.addEventListener('message', (event) => {
-        const message = event.data;
-        if (message.type === 'render') {
-          frame.srcdoc = message.html;
-          refreshButton.classList.toggle('hidden', message.autoRefresh !== 'off');
-          applyZoom(message.zoom);
-        }
+  applyZoom();
+  vscode.postMessage({ type: 'ready' });
+</script>
+`;
 
-        if (message.type === 'setZoom') {
-          applyZoom(message.zoom);
-        }
-      });
+    const withStylesheet = this.injectIntoHead(
+      preparedHtml,
+      `<link href="${stylesUri}" rel="stylesheet">`,
+    );
+    const withBodyStart = withStylesheet.replace(
+      /<body(\s[^>]*)?>/i,
+      (match) => `${match}${toolbarStart}`,
+    );
 
-      vscode.postMessage({ type: 'ready' });
-    </script>
-  </body>
-</html>`;
+    if (withBodyStart !== withStylesheet) {
+      return withBodyStart.replace(/<\/body>/i, `${toolbarEnd}</body>`);
+    }
+
+    return `<!DOCTYPE html><html><head><link href="${stylesUri}" rel="stylesheet"></head><body>${toolbarStart}${preparedHtml}${toolbarEnd}</body></html>`;
   }
 
   private createNonce(): string {

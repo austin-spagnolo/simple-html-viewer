@@ -1,79 +1,78 @@
 :root {
   color-scheme: light dark;
-  --background: var(--vscode-editor-background);
-  --border: var(--vscode-panel-border);
-  --button-bg: var(--vscode-button-secondaryBackground);
-  --button-fg: var(--vscode-button-secondaryForeground);
-  --button-hover: var(--vscode-button-secondaryHoverBackground);
-  --label-bg: var(--vscode-input-background);
-  --label-fg: var(--vscode-input-foreground);
+  --simple-html-viewer-background: var(--vscode-editor-background);
+  --simple-html-viewer-border: var(--vscode-panel-border);
+  --simple-html-viewer-button-bg: var(--vscode-button-secondaryBackground);
+  --simple-html-viewer-button-fg: var(--vscode-button-secondaryForeground);
+  --simple-html-viewer-button-hover: var(--vscode-button-secondaryHoverBackground);
+  --simple-html-viewer-label-bg: var(--vscode-input-background);
+  --simple-html-viewer-label-fg: var(--vscode-input-foreground);
 }
 
-html,
-body {
-  height: 100%;
-  margin: 0;
-  background: var(--background);
-  color: var(--label-fg);
-  font-family:
-    var(--vscode-font-family),
+#simple-html-viewer-root {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  background: var(--simple-html-viewer-background);
+  overflow: hidden;
+}
+
+#simple-html-viewer-toolbar {
+  z-index: 2147483647;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--simple-html-viewer-border);
+  background: var(--simple-html-viewer-background);
+}
+
+.simple-html-viewer-button {
+  border: 1px solid var(--simple-html-viewer-border);
+  border-radius: 10px;
+  background: var(--simple-html-viewer-button-bg);
+  color: var(--simple-html-viewer-button-fg);
+  min-width: 42px;
+  height: 36px;
+  padding: 0 14px;
+  cursor: pointer;
+  font:
+    600 14px/1 var(--vscode-font-family),
     sans-serif;
 }
 
-.app-shell {
-  display: grid;
-  grid-template-rows: auto 1fr;
-  height: 100%;
+.simple-html-viewer-button:hover {
+  background: var(--simple-html-viewer-button-hover);
 }
 
-.toolbar {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px;
-  border-bottom: 1px solid var(--border);
-}
-
-.toolbar-button {
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: var(--button-bg);
-  color: var(--button-fg);
-  min-width: 36px;
-  height: 32px;
-  padding: 0 10px;
-  cursor: pointer;
-}
-
-.toolbar-button:hover {
-  background: var(--button-hover);
-}
-
-.zoom-label {
-  min-width: 64px;
-  height: 32px;
+.simple-html-viewer-zoom-label {
+  min-width: 78px;
+  height: 36px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: var(--label-bg);
+  border: 1px solid var(--simple-html-viewer-border);
+  border-radius: 10px;
+  background: var(--simple-html-viewer-label-bg);
+  color: var(--simple-html-viewer-label-fg);
+  font:
+    600 13px/1 var(--vscode-font-family),
+    sans-serif;
 }
 
-.frame-wrap {
-  position: relative;
+#simple-html-viewer-scroll {
   overflow: auto;
-  background: #fff;
+  min-height: 0;
+  padding: 0;
+  background: var(--simple-html-viewer-background);
 }
 
-#preview-frame {
-  display: block;
-  border: 0;
-  transform-origin: top left;
-  background: #fff;
+#simple-html-viewer-content {
+  min-height: 100%;
+  background: transparent;
 }
 
 .hidden {
   display: none;
 }
-
