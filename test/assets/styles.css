@@ -1,0 +1,32 @@
+body {
+  font-family: Arial, sans-serif;
+  margin: 24px;
+  line-height: 1.4;
+}
+
+.card {
+  padding: 16px;
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  margin-bottom: 24px;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+th,
+td {
+  border: 1px solid #ccc;
+  padding: 8px;
+  text-align: left;
+}
+
+th button {
+  background: none;
+  border: 0;
+  font: inherit;
+  cursor: pointer;
+}
+
