@@ -3,7 +3,7 @@
 ## Baseline
 
 - Launch the extension with `F5`.
-- Open [test/user-test.html](/C:/Users/austi/Documents/Git/html-viewer/test/user-test.html) in the Extension Development Host.
+- Open [`test/user-test.html`](../test/user-test.html) in the Extension Development Host.
 
 ## Open Paths
 

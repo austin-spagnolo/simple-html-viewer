@@ -34,7 +34,7 @@ Press `F5` in VS Code to launch an Extension Development Host.
 
 ## Manual QA
 
-Use [test/user-test.html](/C:/Users/austi/Documents/Git/html-viewer/test/user-test.html) as the baseline test page.
+Use [`test/user-test.html`](test/user-test.html) as the baseline test page.
 
 - Open the preview from the command palette, editor title, explorer context menu, and `Open With...`.
 - Verify the counter button increments without reloading the page.
@@ -61,7 +61,13 @@ npm run package
 Before publishing:
 
 - Replace the placeholder `publisher`, `repository`, `homepage`, and `bugs` values in `package.json`.
-- Add a real extension icon and wire it into `package.json`.
 - Create a VS Code Marketplace publisher and authentication token.
 - Push the repository to GitHub and enable the included CI workflow.
 - Package a `.vsix` locally and install it once as a final smoke test.
+
+## GitHub And Marketplace Setup
+
+1. Create a GitHub repository for the project and update the `repository`, `homepage`, and `bugs` fields in `package.json`.
+2. Create or choose a VS Code Marketplace publisher and replace the placeholder `publisher` value in `package.json`.
+3. Add a `VSCE_PAT` GitHub Actions secret with a Marketplace personal access token if you want the release workflow to publish automatically.
+4. Run the manual `Release` workflow to package the extension or publish it once the publisher and token are configured.

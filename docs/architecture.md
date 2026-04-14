@@ -17,13 +17,14 @@ The extension uses a VS Code readonly custom editor backed by a webview. This av
 
 - Renders the preview toolbar.
 - Owns zoom controls, refresh behavior, and state synchronization.
-- Hosts the preview content inside an iframe so the shell UI stays stable while the HTML document updates.
+- Injects the toolbar directly into the rendered preview document rather than hosting the user HTML inside a nested iframe.
 
 ### HTML document rendering
 
 - Reads the selected HTML file as text.
-- Injects a `<base>` element that points to the HTML file's directory using `webview.asWebviewUri(...)`.
-- Loads the result into the iframe using `srcdoc`, which allows embedded JavaScript and interactive libraries to execute inside the preview.
+- Rewrites relative `src` and `href` resource references to `webview.asWebviewUri(...)` values.
+- Injects a preview-specific Content Security Policy that allows local rewritten assets, inline scripts, and remote resources such as Plotly CDN.
+- Rebuilds the final preview document as a single webview HTML document so interactive content runs in the same DOM as the toolbar and content surface.
 
 ## Remote Support Strategy
 
@@ -46,5 +47,10 @@ Planned future enhancement:
 
 - A configurable global default zoom is provided through extension settings.
 - Each open preview maintains its current zoom independently from VS Code application zoom.
-- Toolbar actions update the current preview immediately and can later be extended with stronger per-file persistence if needed.
+- Zoom is applied inside the webview document using Chromium-backed CSS zoom behavior rather than reloading the page for every zoom change.
+- Toolbar actions update the current preview immediately while preserving the page state of interactive content.
 
+## Tradeoffs
+
+- Because the toolbar is injected into the same document as the previewed page, very aggressive page-level CSS could affect toolbar layout.
+- The current zoom model is optimized for Chromium-based VS Code webviews and may not match standalone browser zoom perfectly for every third-party widget.

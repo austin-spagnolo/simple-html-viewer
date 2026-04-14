@@ -4,7 +4,8 @@
   "description": "A minimal VS Code HTML viewer with interactive webview rendering and independent zoom controls.",
   "version": "0.0.1",
   "publisher": "your-publisher",
-  "license": "MIT",
+  "preview": true,
+  "license": "SEE LICENSE IN LICENSE",
   "repository": {
     "type": "git",
     "url": "https://github.com/your-org/simple-html-viewer.git"
@@ -16,9 +17,18 @@
   "engines": {
     "vscode": "^1.98.0"
   },
-  "categories": ["Other"],
+  "categories": ["Visualization", "Other"],
   "keywords": ["html", "preview", "webview", "plotly", "javascript"],
+  "galleryBanner": {
+    "color": "#1f1f1f",
+    "theme": "dark"
+  },
+  "qna": false,
+  "markdown": "github",
+  "pricing": "Free",
   "main": "./dist/extension.js",
+  "extensionKind": ["workspace"],
+  "icon": "media/icon.png",
   "activationEvents": [
     "onCommand:simpleHtmlViewer.openPreview",
     "onCustomEditor:simpleHtmlViewer.preview"
@@ -99,6 +109,8 @@
     "format": "prettier --write .",
     "lint": "eslint \"src/**/*.ts\"",
     "package": "vsce package",
+    "package:vsix": "vsce package",
+    "publish:check": "npm run check && npm run package:vsix",
     "vscode:prepublish": "npm run build"
   },
   "devDependencies": {
