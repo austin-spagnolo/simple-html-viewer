@@ -38,7 +38,8 @@
       {
         "command": "simpleHtmlViewer.openPreview",
         "title": "Simple HTML Viewer: Open Preview",
-        "category": "Simple HTML Viewer"
+        "category": "Simple HTML Viewer",
+        "icon": "$(browser)"
       },
       {
         "command": "simpleHtmlViewer.refreshPreview",
@@ -82,7 +83,7 @@
       "editor/title": [
         {
           "command": "simpleHtmlViewer.openPreview",
-          "when": "resourceExtname == .html || resourceExtname == .htm",
+          "when": "(resourceExtname == .html || resourceExtname == .htm) && activeCustomEditorId != simpleHtmlViewer.preview",
           "group": "navigation"
         }
       ]

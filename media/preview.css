@@ -64,12 +64,13 @@
 #simple-html-viewer-scroll {
   overflow: auto;
   min-height: 0;
-  padding: 0;
+  padding: 0 14px 16px;
   background: var(--simple-html-viewer-background);
 }
 
 #simple-html-viewer-content {
   min-height: 100%;
+  box-sizing: border-box;
   background: transparent;
 }
 
