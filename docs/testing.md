@@ -1,4 +1,4 @@
-# Manual QA Checklist
+# Testing Guide
 
 ## Baseline
 

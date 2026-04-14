@@ -15,7 +15,7 @@
 - Run `npm run check`.
 - Run `npm run package:vsix`.
 - Install the packaged `.vsix` locally and perform a final smoke test.
-- Run the manual QA checklist in [manual-qa.md](./manual-qa.md).
+- Run the testing guide in [testing.md](./testing.md).
 
 ## GitHub
 

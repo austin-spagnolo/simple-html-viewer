@@ -2,7 +2,7 @@
 
 Simple HTML Viewer is a minimal VS Code extension for rendering interactive HTML documents inside VS Code without relying on a localhost preview server.
 
-## Goals
+## Highlights
 
 - Keep HTML preview simple and reliable.
 - Support interactive HTML, embedded JavaScript, and libraries such as Plotly.
@@ -17,11 +17,21 @@ Simple HTML Viewer is a minimal VS Code extension for rendering interactive HTML
 - Refresh button when auto-refresh is disabled.
 - Auto-refresh on save by default.
 
+## Usage
+
+Open any `.html` or `.htm` file and use `Simple HTML Viewer: Open Preview`, the explorer context menu, the editor title action, or `Open With...` to launch the preview.
+
 ## Settings
 
 - `simpleHtmlViewer.autoRefresh`: `onSave` or `off`
 - `simpleHtmlViewer.zoomStep`: zoom increment percentage
 - `simpleHtmlViewer.defaultZoom`: starting zoom percentage
+
+## Limitations
+
+- Very wide or fixed-width HTML documents may still require horizontal scrolling at larger zoom levels.
+- Aggressive page-level CSS may affect the injected preview toolbar because the toolbar lives in the same document as the previewed HTML.
+- The current zoom model is optimized for Chromium-based VS Code webviews and may render some third-party widgets slightly differently than a standalone browser.
 
 ## Development
 
@@ -32,42 +42,8 @@ npm run check
 
 Press `F5` in VS Code to launch an Extension Development Host.
 
-## Manual QA
+## Project Docs
 
-Use [`test/user-test.html`](test/user-test.html) as the baseline test page.
-
-- Open the preview from the command palette, editor title, explorer context menu, and `Open With...`.
-- Verify the counter button increments without reloading the page.
-- Verify clicking sortable table headers reorders rows.
-- Verify the Plotly chart renders and remains interactive.
-- Verify zoom `-`, `+`, and `reset` update the preview independently of VS Code app zoom.
-- Set `simpleHtmlViewer.autoRefresh` to `onSave`, save the HTML file, and verify the preview updates automatically.
-- Set `simpleHtmlViewer.autoRefresh` to `off`, save the file, confirm no automatic update occurs, then click `refresh` and confirm the preview updates.
-- Repeat the same checks in a Remote-SSH workspace.
-
-## Known Limitations
-
-- Very wide or fixed-width HTML documents may still require horizontal scrolling at larger zoom levels.
-- Aggressive page-level CSS may affect the injected preview toolbar because the toolbar lives in the same document as the previewed HTML.
-- The current zoom model is optimized for Chromium-based VS Code webviews and may render some third-party widgets slightly differently than a standalone browser.
-
-## Publishing
-
-```bash
-npm install
-npm run package:vsix
-```
-
-Before the first publish:
-
-- Push the latest local commits to GitHub.
-- Package a `.vsix` locally and install it once as a final smoke test.
-- Confirm the `VSCE_PAT` GitHub Actions secret exists for the repository.
-
-## GitHub And Marketplace Setup
-
-1. Push the current branch to GitHub.
-2. Open the repository `Actions` tab and choose the `Release` workflow.
-3. Run the workflow with `publish` set to `false` if you only want a packaged `.vsix` artifact.
-4. Run the workflow with `publish` set to `true` when you are ready to publish to the VS Code Marketplace.
-5. If you prefer local publishing, run `npx @vscode/vsce publish` after confirming the Marketplace publisher and token are set up.
+- [Architecture](docs/architecture.md)
+- [Testing](docs/testing.md)
+- [Release Checklist](docs/release-checklist.md)
