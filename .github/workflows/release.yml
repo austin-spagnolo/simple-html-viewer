@@ -3,6 +3,11 @@ name: Release
 on:
   workflow_dispatch:
     inputs:
+      tag:
+        description: Git tag and GitHub Release version (for example v0.0.1)
+        required: true
+        default: "v0.0.1"
+        type: string
       publish:
         description: Publish to the VS Code Marketplace
         required: true
@@ -15,10 +20,14 @@ on:
 jobs:
   release:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -44,8 +53,35 @@ jobs:
           name: simple-html-viewer-release-vsix
           path: "*.vsix"
 
+      - name: Create Git tag if missing
+        run: |
+          if git rev-parse "${{ github.event.inputs.tag }}" >/dev/null 2>&1; then
+            echo "Tag already exists locally."
+          else
+            git tag "${{ github.event.inputs.tag }}"
+          fi
+
+      - name: Push Git tag if missing on origin
+        run: |
+          if git ls-remote --tags origin | grep "refs/tags/${{ github.event.inputs.tag }}$"; then
+            echo "Tag already exists on origin."
+          else
+            git push origin "${{ github.event.inputs.tag }}"
+          fi
+
+      - name: Create or update GitHub Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release view "${{ github.event.inputs.tag }}" --repo "${{ github.repository }}" >/dev/null 2>&1 && exists=true || exists=false
+          if [ "$exists" = true ]; then
+            gh release upload "${{ github.event.inputs.tag }}" ./*.vsix --clobber --repo "${{ github.repository }}"
+          else
+            gh release create "${{ github.event.inputs.tag }}" ./*.vsix --title "${{ github.event.inputs.tag }}" --notes "Release ${{ github.event.inputs.tag }}" --repo "${{ github.repository }}"
+          fi
+
       - name: Publish to Marketplace
         if: ${{ github.event.inputs.publish == 'true' }}
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
-        run: npx @vscode/vsce publish --pat "$VSCE_PAT"
+        run: npx @vscode/vsce publish --pat "$VSCE_PAT" --githubBranch master

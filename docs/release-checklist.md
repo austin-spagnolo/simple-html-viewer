@@ -21,4 +21,5 @@
 
 - Push the latest local commits to GitHub.
 - Confirm the `CI` workflow runs on the default branch.
-- Use the manual `Release` workflow to package or publish the extension.
+- Use the manual `Release` workflow to create a GitHub Release and attach the packaged `.vsix`.
+- Set `publish` to `true` in the `Release` workflow when you also want to publish to the VS Code Marketplace.

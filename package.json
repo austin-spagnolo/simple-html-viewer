@@ -109,8 +109,8 @@
     "check": "npm run lint && npm run build",
     "format": "prettier --write .",
     "lint": "eslint \"src/**/*.ts\"",
-    "package": "vsce package",
-    "package:vsix": "vsce package",
+    "package": "vsce package --githubBranch master",
+    "package:vsix": "vsce package --githubBranch master",
     "publish:check": "npm run check && npm run package:vsix",
     "vscode:prepublish": "npm run build"
   },
