@@ -6,8 +6,11 @@ on:
       publish:
         description: Publish to the VS Code Marketplace
         required: true
-        default: false
-        type: boolean
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
 
 jobs:
   release:
@@ -42,7 +45,7 @@ jobs:
           path: "*.vsix"
 
       - name: Publish to Marketplace
-        if: ${{ inputs.publish }}
+        if: ${{ github.event.inputs.publish == 'true' }}
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
         run: npx @vscode/vsce publish --pat "$VSCE_PAT"
