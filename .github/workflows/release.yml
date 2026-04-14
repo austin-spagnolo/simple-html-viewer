@@ -108,6 +108,6 @@ jobs:
           body="$(gh release view "${{ github.event.inputs.tag }}" --json body --jq .body --repo "${{ github.repository }}")"
           updated_body="${body}
 
-${MARKETPLACE_PUBLISHED_MARKER}
-Marketplace publish completed."
-          gh release edit "${{ github.event.inputs.tag }}" --notes "$updated_body" --repo "${{ github.repository }}"
+# ${MARKETPLACE_PUBLISHED_MARKER}
+# Marketplace publish completed."
+#           gh release edit "${{ github.event.inputs.tag }}" --notes "$updated_body" --repo "${{ github.repository }}"
