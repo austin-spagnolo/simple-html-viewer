@@ -1,5 +1,8 @@
 name: Release
 
+env:
+  MARKETPLACE_PUBLISHED_MARKER: "<!-- marketplace-published -->"
+
 on:
   workflow_dispatch:
     inputs:
@@ -80,8 +83,31 @@ jobs:
             gh release create "${{ github.event.inputs.tag }}" ./*.vsix --title "${{ github.event.inputs.tag }}" --notes "Release ${{ github.event.inputs.tag }}" --repo "${{ github.repository }}"
           fi
 
+      - name: Block duplicate Marketplace publish
+        if: ${{ github.event.inputs.publish == 'true' }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          body="$(gh release view "${{ github.event.inputs.tag }}" --json body --jq .body --repo "${{ github.repository }}")"
+          if printf '%s' "$body" | grep -q "${MARKETPLACE_PUBLISHED_MARKER}"; then
+            echo "Marketplace publish has already completed for tag ${{ github.event.inputs.tag }}."
+            exit 1
+          fi
+
       - name: Publish to Marketplace
         if: ${{ github.event.inputs.publish == 'true' }}
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
         run: npx @vscode/vsce publish --pat "$VSCE_PAT" --githubBranch master
+
+      - name: Mark GitHub Release as Marketplace published
+        if: ${{ github.event.inputs.publish == 'true' }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          body="$(gh release view "${{ github.event.inputs.tag }}" --json body --jq .body --repo "${{ github.repository }}")"
+          updated_body="${body}
+
+${MARKETPLACE_PUBLISHED_MARKER}
+Marketplace publish completed."
+          gh release edit "${{ github.event.inputs.tag }}" --notes "$updated_body" --repo "${{ github.repository }}"
