@@ -3,7 +3,7 @@
   "displayName": "Simple HTML Viewer",
   "description": "A minimal VS Code HTML viewer with interactive webview rendering and independent zoom controls.",
   "version": "0.0.1",
-  "publisher": "your-publisher",
+  "publisher": "austin-spagnolo",
   "preview": true,
   "license": "SEE LICENSE IN LICENSE",
   "repository": {
