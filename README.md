@@ -55,19 +55,19 @@ Use [`test/user-test.html`](test/user-test.html) as the baseline test page.
 
 ```bash
 npm install
-npm run package
+npm run package:vsix
 ```
 
-Before publishing:
+Before the first publish:
 
-- Replace the placeholder `publisher`, `repository`, `homepage`, and `bugs` values in `package.json`.
-- Create a VS Code Marketplace publisher and authentication token.
-- Push the repository to GitHub and enable the included CI workflow.
+- Push the latest local commits to GitHub.
 - Package a `.vsix` locally and install it once as a final smoke test.
+- Confirm the `VSCE_PAT` GitHub Actions secret exists for the repository.
 
 ## GitHub And Marketplace Setup
 
-1. Create a GitHub repository for the project and update the `repository`, `homepage`, and `bugs` fields in `package.json`.
-2. Create or choose a VS Code Marketplace publisher and replace the placeholder `publisher` value in `package.json`.
-3. Add a `VSCE_PAT` GitHub Actions secret with a Marketplace personal access token if you want the release workflow to publish automatically.
-4. Run the manual `Release` workflow to package the extension or publish it once the publisher and token are configured.
+1. Push the current branch to GitHub.
+2. Open the repository `Actions` tab and choose the `Release` workflow.
+3. Run the workflow with `publish` set to `false` if you only want a packaged `.vsix` artifact.
+4. Run the workflow with `publish` set to `true` when you are ready to publish to the VS Code Marketplace.
+5. If you prefer local publishing, run `npx @vscode/vsce publish` after confirming the Marketplace publisher and token are set up.

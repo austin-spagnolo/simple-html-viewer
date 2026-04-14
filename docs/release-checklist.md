@@ -2,8 +2,6 @@
 
 ## Metadata
 
-- Replace the placeholder `publisher` value in `package.json`.
-- Replace the placeholder GitHub repository URLs in `package.json`.
 - Review the extension description, keywords, categories, and gallery banner values.
 
 ## Marketplace
@@ -21,6 +19,6 @@
 
 ## GitHub
 
-- Push the repository to GitHub.
+- Push the latest local commits to GitHub.
 - Confirm the `CI` workflow runs on the default branch.
 - Use the manual `Release` workflow to package or publish the extension.
