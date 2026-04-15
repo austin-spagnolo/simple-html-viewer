@@ -1,5 +1,6 @@
 import * as path from 'path';
 import { TextDecoder } from 'util';
+import { URL } from 'url';
 import * as vscode from 'vscode';
 
 type AutoRefreshMode = 'onSave' | 'off';
@@ -213,7 +214,6 @@ export class HtmlPreviewProvider implements vscode.CustomReadonlyEditorProvider 
     documentUri: vscode.Uri,
     html: string,
   ): Promise<string> {
-    const normalizedHtml = this.normalizeHtmlForPreview(html);
     const previewCsp = [
       `default-src 'none';`,
       `img-src ${webview.cspSource} data: blob: https: http:;`,
@@ -225,37 +225,11 @@ export class HtmlPreviewProvider implements vscode.CustomReadonlyEditorProvider 
     ].join(' ');
 
     const withCsp = this.injectIntoHead(
-      normalizedHtml,
+      html,
       `<meta http-equiv="Content-Security-Policy" content="${previewCsp}">`,
     );
 
-    return withCsp.replace(
-      /\b(href|src)=("([^"]*)"|'([^']*)')/gi,
-      (
-        fullMatch,
-        attribute: string,
-        quoted: string,
-        doubleQuoted: string | undefined,
-        singleQuoted: string | undefined,
-      ) => {
-        const rawValue = doubleQuoted ?? singleQuoted ?? '';
-        if (!this.shouldRewriteResourceUrl(rawValue)) {
-          return fullMatch;
-        }
-
-        const resolvedUri = vscode.Uri.joinPath(
-          vscode.Uri.joinPath(documentUri, '..'),
-          rawValue,
-        );
-        const rewrittenUri = webview.asWebviewUri(resolvedUri).toString();
-        const quote = quoted.startsWith('"') ? '"' : "'";
-        return `${attribute}=${quote}${rewrittenUri}${quote}`;
-      },
-    );
-  }
-
-  private normalizeHtmlForPreview(html: string): string {
-    return html.replace(/\shtml-widget-static-bound\b/g, '');
+    return this.rewriteHtmlForPreview(webview, documentUri, withCsp);
   }
 
   private injectIntoHead(html: string, tag: string): string {
@@ -266,21 +240,424 @@ export class HtmlPreviewProvider implements vscode.CustomReadonlyEditorProvider 
     return `<!DOCTYPE html><html><head>${tag}</head><body>${html}</body></html>`;
   }
 
+  private rewriteHtmlForPreview(
+    webview: vscode.Webview,
+    documentUri: vscode.Uri,
+    html: string,
+  ): string {
+    const lowerHtml = html.toLowerCase();
+    let index = 0;
+    let result = '';
+    let currentBaseUrl = documentUri.toString();
+
+    while (index < html.length) {
+      const nextTagStart = html.indexOf('<', index);
+      if (nextTagStart === -1) {
+        result += html.slice(index);
+        break;
+      }
+
+      result += html.slice(index, nextTagStart);
+
+      if (lowerHtml.startsWith('<!--', nextTagStart)) {
+        const commentEnd = html.indexOf('-->', nextTagStart + 4);
+        if (commentEnd === -1) {
+          result += html.slice(nextTagStart);
+          break;
+        }
+
+        result += html.slice(nextTagStart, commentEnd + 3);
+        index = commentEnd + 3;
+        continue;
+      }
+
+      if (lowerHtml.startsWith('<![cdata[', nextTagStart)) {
+        const cdataEnd = html.indexOf(']]>', nextTagStart + 9);
+        if (cdataEnd === -1) {
+          result += html.slice(nextTagStart);
+          break;
+        }
+
+        result += html.slice(nextTagStart, cdataEnd + 3);
+        index = cdataEnd + 3;
+        continue;
+      }
+
+      if (lowerHtml.startsWith('</', nextTagStart)) {
+        const closingTagEnd = this.findTagEnd(html, nextTagStart);
+        if (closingTagEnd === -1) {
+          result += html.slice(nextTagStart);
+          break;
+        }
+
+        result += html.slice(nextTagStart, closingTagEnd + 1);
+        index = closingTagEnd + 1;
+        continue;
+      }
+
+      if (lowerHtml.startsWith('<!', nextTagStart) || lowerHtml.startsWith('<?', nextTagStart)) {
+        const declarationEnd = html.indexOf('>', nextTagStart + 2);
+        if (declarationEnd === -1) {
+          result += html.slice(nextTagStart);
+          break;
+        }
+
+        result += html.slice(nextTagStart, declarationEnd + 1);
+        index = declarationEnd + 1;
+        continue;
+      }
+
+      const tagEnd = this.findTagEnd(html, nextTagStart);
+      if (tagEnd === -1) {
+        result += html.slice(nextTagStart);
+        break;
+      }
+
+      const tagSource = html.slice(nextTagStart, tagEnd + 1);
+      const rewrittenTag = this.rewriteOpenTagForPreview(
+        webview,
+        tagSource,
+        currentBaseUrl,
+      );
+      result += rewrittenTag.html;
+      currentBaseUrl = rewrittenTag.baseUrl;
+      index = tagEnd + 1;
+
+      if (this.isRawTextElement(rewrittenTag.tagName) && !rewrittenTag.selfClosing) {
+        const closingTagStart = lowerHtml.indexOf(
+          `</${rewrittenTag.tagName}`,
+          index,
+        );
+
+        if (closingTagStart === -1) {
+          result += html.slice(index);
+          break;
+        }
+
+        result += html.slice(index, closingTagStart);
+        index = closingTagStart;
+      }
+    }
+
+    return result;
+  }
+
+  private rewriteOpenTagForPreview(
+    webview: vscode.Webview,
+    tagSource: string,
+    currentBaseUrl: string,
+  ): {
+    html: string;
+    tagName: string;
+    selfClosing: boolean;
+    baseUrl: string;
+  } {
+    const tagNameMatch = tagSource.match(/^<\s*([^\s/>]+)/);
+    if (!tagNameMatch) {
+      return {
+        html: tagSource,
+        tagName: '',
+        selfClosing: false,
+        baseUrl: currentBaseUrl,
+      };
+    }
+
+    const tagName = tagNameMatch[1].toLowerCase();
+    const selfClosing = /\/\s*>$/.test(tagSource);
+    const tagContentEnd = tagSource.length - (selfClosing ? 2 : 1);
+    let cursor = 1;
+    let rewrittenTag = '<';
+    let nextBaseUrl = currentBaseUrl;
+
+    while (cursor < tagContentEnd && /\s/.test(tagSource[cursor])) {
+      rewrittenTag += tagSource[cursor];
+      cursor += 1;
+    }
+
+    rewrittenTag += tagSource.slice(cursor, cursor + tagNameMatch[1].length);
+    cursor += tagNameMatch[1].length;
+
+    while (cursor < tagContentEnd) {
+      const whitespaceStart = cursor;
+      while (cursor < tagContentEnd && /\s/.test(tagSource[cursor])) {
+        cursor += 1;
+      }
+      rewrittenTag += tagSource.slice(whitespaceStart, cursor);
+
+      if (cursor >= tagContentEnd) {
+        break;
+      }
+
+      if (tagSource[cursor] === '/') {
+        rewrittenTag += tagSource.slice(cursor, tagContentEnd);
+        cursor = tagContentEnd;
+        break;
+      }
+
+      const attrNameStart = cursor;
+      while (cursor < tagContentEnd && !/[\s=/>]/.test(tagSource[cursor])) {
+        cursor += 1;
+      }
+
+      const attrNameSource = tagSource.slice(attrNameStart, cursor);
+      const attrName = attrNameSource.toLowerCase();
+      rewrittenTag += attrNameSource;
+
+      const whitespaceAfterNameStart = cursor;
+      while (cursor < tagContentEnd && /\s/.test(tagSource[cursor])) {
+        cursor += 1;
+      }
+      rewrittenTag += tagSource.slice(whitespaceAfterNameStart, cursor);
+
+      if (cursor >= tagContentEnd || tagSource[cursor] !== '=') {
+        continue;
+      }
+
+      rewrittenTag += '=';
+      cursor += 1;
+
+      const whitespaceAfterEqualsStart = cursor;
+      while (cursor < tagContentEnd && /\s/.test(tagSource[cursor])) {
+        cursor += 1;
+      }
+      rewrittenTag += tagSource.slice(whitespaceAfterEqualsStart, cursor);
+
+      if (cursor >= tagContentEnd) {
+        break;
+      }
+
+      const quote = tagSource[cursor] === '"' || tagSource[cursor] === "'"
+        ? tagSource[cursor]
+        : '';
+      let attrValue = '';
+
+      if (quote) {
+        cursor += 1;
+        const valueStart = cursor;
+        while (cursor < tagContentEnd && tagSource[cursor] !== quote) {
+          cursor += 1;
+        }
+        attrValue = tagSource.slice(valueStart, cursor);
+        const rewrittenValue = this.rewriteAttributeValueForPreview(
+          webview,
+          tagName,
+          attrName,
+          attrValue,
+          currentBaseUrl,
+        );
+        rewrittenTag += `${quote}${rewrittenValue}${quote}`;
+        if (cursor < tagContentEnd && tagSource[cursor] === quote) {
+          cursor += 1;
+        }
+      } else {
+        const valueStart = cursor;
+        while (cursor < tagContentEnd && !/[\s>]/.test(tagSource[cursor])) {
+          cursor += 1;
+        }
+        attrValue = tagSource.slice(valueStart, cursor);
+        const rewrittenValue = this.rewriteAttributeValueForPreview(
+          webview,
+          tagName,
+          attrName,
+          attrValue,
+          currentBaseUrl,
+        );
+        rewrittenTag += `"${rewrittenValue}"`;
+      }
+
+      if (tagName === 'base' && attrName === 'href') {
+        nextBaseUrl =
+          this.resolveUrlAgainstBase(currentBaseUrl, attrValue) ?? currentBaseUrl;
+      }
+    }
+
+    rewrittenTag += selfClosing ? '/>' : '>';
+
+    return {
+      html: rewrittenTag,
+      tagName,
+      selfClosing,
+      baseUrl: nextBaseUrl,
+    };
+  }
+
+  private rewriteAttributeValueForPreview(
+    webview: vscode.Webview,
+    tagName: string,
+    attrName: string,
+    value: string,
+    currentBaseUrl: string,
+  ): string {
+    const normalizedValue = this.normalizeAttributeValueForPreview(
+      tagName,
+      attrName,
+      value,
+    );
+
+    if (attrName === 'srcset') {
+      return this.rewriteSrcsetForPreview(
+        webview,
+        normalizedValue,
+        currentBaseUrl,
+      );
+    }
+
+    if (!this.shouldRewriteAttribute(attrName)) {
+      return normalizedValue;
+    }
+
+    return this.rewriteUrlForPreview(webview, currentBaseUrl, normalizedValue);
+  }
+
+  private normalizeAttributeValueForPreview(
+    _tagName: string,
+    attrName: string,
+    value: string,
+  ): string {
+    if (attrName !== 'class') {
+      return value;
+    }
+
+    const classNames = value.split(/\s+/).filter(Boolean);
+    if (
+      !classNames.includes('html-widget') ||
+      !classNames.includes('html-widget-static-bound')
+    ) {
+      return value;
+    }
+
+    return classNames
+      .filter((className) => className !== 'html-widget-static-bound')
+      .join(' ');
+  }
+
+  private shouldRewriteAttribute(attrName: string): boolean {
+    return (
+      attrName === 'href' ||
+      attrName === 'src' ||
+      attrName === 'srcset' ||
+      attrName === 'poster' ||
+      attrName === 'data' ||
+      attrName === 'action' ||
+      attrName === 'formaction' ||
+      attrName === 'xlink:href'
+    );
+  }
+
+  private rewriteSrcsetForPreview(
+    webview: vscode.Webview,
+    srcset: string,
+    currentBaseUrl: string,
+  ): string {
+    if (!srcset || srcset.includes('data:')) {
+      return srcset;
+    }
+
+    return srcset
+      .split(',')
+      .map((candidate) => {
+        const trimmedCandidate = candidate.trim();
+        if (!trimmedCandidate) {
+          return candidate;
+        }
+
+        const separatorIndex = trimmedCandidate.search(/\s/);
+        if (separatorIndex === -1) {
+          return this.rewriteUrlForPreview(
+            webview,
+            currentBaseUrl,
+            trimmedCandidate,
+          );
+        }
+
+        const urlPart = trimmedCandidate.slice(0, separatorIndex);
+        const descriptorPart = trimmedCandidate.slice(separatorIndex);
+        return `${this.rewriteUrlForPreview(webview, currentBaseUrl, urlPart)}${descriptorPart}`;
+      })
+      .join(', ');
+  }
+
+  private rewriteUrlForPreview(
+    webview: vscode.Webview,
+    currentBaseUrl: string,
+    value: string,
+  ): string {
+    if (!this.shouldRewriteResourceUrl(value)) {
+      return value;
+    }
+
+    const resolvedUrl = this.resolveUrlAgainstBase(currentBaseUrl, value);
+    if (!resolvedUrl) {
+      return value;
+    }
+
+    if (this.isRemoteResourceUrl(resolvedUrl)) {
+      return resolvedUrl;
+    }
+
+    return webview.asWebviewUri(vscode.Uri.parse(resolvedUrl)).toString();
+  }
+
+  private resolveUrlAgainstBase(
+    currentBaseUrl: string,
+    value: string,
+  ): string | undefined {
+    try {
+      return new URL(value, currentBaseUrl).toString();
+    } catch {
+      return undefined;
+    }
+  }
+
   private shouldRewriteResourceUrl(value: string): boolean {
     if (!value) {
       return false;
     }
 
-    const lowerValue = value.toLowerCase();
     return !(
-      lowerValue.startsWith('http://') ||
-      lowerValue.startsWith('https://') ||
-      lowerValue.startsWith('data:') ||
-      lowerValue.startsWith('blob:') ||
-      lowerValue.startsWith('#') ||
-      lowerValue.startsWith('mailto:') ||
-      lowerValue.startsWith('javascript:')
+      value.startsWith('#') ||
+      value.startsWith('//') ||
+      /^[a-zA-Z][a-zA-Z\d+.-]*:/.test(value)
     );
+  }
+
+  private isRemoteResourceUrl(value: string): boolean {
+    return /^(https?|data|blob):/i.test(value);
+  }
+
+  private isRawTextElement(tagName: string): boolean {
+    return (
+      tagName === 'script' ||
+      tagName === 'style' ||
+      tagName === 'textarea' ||
+      tagName === 'title'
+    );
+  }
+
+  private findTagEnd(html: string, startIndex: number): number {
+    let quote: '"' | "'" | undefined;
+
+    for (let index = startIndex + 1; index < html.length; index += 1) {
+      const character = html[index];
+
+      if (quote) {
+        if (character === quote) {
+          quote = undefined;
+        }
+        continue;
+      }
+
+      if (character === '"' || character === "'") {
+        quote = character;
+        continue;
+      }
+
+      if (character === '>') {
+        return index;
+      }
+    }
+
+    return -1;
   }
 
   private async getWebviewHtml(
