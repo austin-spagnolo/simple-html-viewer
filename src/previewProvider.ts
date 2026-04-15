@@ -341,6 +341,17 @@ export class HtmlPreviewProvider implements vscode.CustomReadonlyEditorProvider 
     document.documentElement.style.scrollPaddingTop =
       String(reservedHeight) + 'px';
   };
+  const notifyResponsiveLayout = () => {
+    const dispatchResize = () => {
+      window.dispatchEvent(new Event('resize'));
+    };
+
+    requestAnimationFrame(() => {
+      applyLayoutOffset();
+      dispatchResize();
+      requestAnimationFrame(dispatchResize);
+    });
+  };
   const applyZoom = (value) => {
     const style = ensureStyle(zoomStyleId);
     style.textContent =
@@ -350,6 +361,7 @@ export class HtmlPreviewProvider implements vscode.CustomReadonlyEditorProvider 
             String(value / 100) +
             '; }';
     zoomLabel.textContent = value + '%';
+    notifyResponsiveLayout();
   };
 
   document.getElementById('simple-html-viewer-zoom-out')?.addEventListener('click', () => {
