@@ -60,9 +60,31 @@ export function activate(context: vscode.ExtensionContext): void {
       provider.handleDocumentSaved(document);
     }),
   );
+
+  if (context.extensionMode === vscode.ExtensionMode.Test) {
+    context.subscriptions.push(
+      vscode.commands.registerCommand(
+        'simpleHtmlViewer._test.setZoom',
+        async (resource: vscode.Uri, zoom: number) => {
+          await provider.testSetZoom(resource, zoom);
+        },
+      ),
+      vscode.commands.registerCommand(
+        'simpleHtmlViewer._test.getZoom',
+        (resource: vscode.Uri) => provider.testGetZoom(resource),
+      ),
+      vscode.commands.registerCommand(
+        'simpleHtmlViewer._test.getRenderCount',
+        (resource: vscode.Uri) => provider.testGetRenderCount(resource),
+      ),
+      vscode.commands.registerCommand(
+        'simpleHtmlViewer._test.getLastRenderedHtml',
+        (resource: vscode.Uri) => provider.testGetLastRenderedHtml(resource),
+      ),
+    );
+  }
 }
 
 export function deactivate(): void {
   // Nothing to dispose beyond extension subscriptions.
 }
-

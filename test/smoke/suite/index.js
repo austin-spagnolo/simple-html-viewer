@@ -1,9 +1,9 @@
 const assert = require('node:assert/strict');
-const path = require('node:path');
 const vscode = require('vscode');
 
 const PREVIEW_VIEW_TYPE = 'simpleHtmlViewer.preview';
 const EXTENSION_ID = 'austin-spagnolo.simple-html-viewer';
+const UPDATED_TITLE = 'Simple HTML Viewer Test Document Updated';
 
 function delay(ms) {
   return new Promise((resolve) => {
@@ -47,6 +47,20 @@ async function closeAllEditors() {
   await waitFor(() => getAllTabs().length === 0, 5000).catch(() => undefined);
 }
 
+async function createSmokeFixture() {
+  const workspaceRoot = vscode.workspace.workspaceFolders[0].uri;
+  const sourceUri = vscode.Uri.joinPath(workspaceRoot, 'test', 'user-test.html');
+  const fixtureUri = vscode.Uri.joinPath(
+    workspaceRoot,
+    'test',
+    `.smoke-${Date.now()}.html`,
+  );
+
+  const bytes = await vscode.workspace.fs.readFile(sourceUri);
+  await vscode.workspace.fs.writeFile(fixtureUri, bytes);
+  return fixtureUri;
+}
+
 async function run() {
   await closeAllEditors();
 
@@ -62,32 +76,114 @@ async function run() {
   });
   assert(commands.includes('simpleHtmlViewer.openPreview'));
   assert(commands.includes('simpleHtmlViewer.refreshPreview'));
+  assert(commands.includes('simpleHtmlViewer._test.setZoom'));
+  assert(commands.includes('simpleHtmlViewer._test.getZoom'));
+  assert(commands.includes('simpleHtmlViewer._test.getRenderCount'));
+  assert(commands.includes('simpleHtmlViewer._test.getLastRenderedHtml'));
 
-  const targetPath = path.join(
-    vscode.workspace.workspaceFolders[0].uri.fsPath,
-    'test',
-    'user-test.html',
-  );
-  const targetUri = vscode.Uri.file(targetPath);
+  const targetUri = await createSmokeFixture();
 
-  const document = await vscode.workspace.openTextDocument(targetUri);
-  await vscode.window.showTextDocument(document);
+  try {
+    const document = await vscode.workspace.openTextDocument(targetUri);
+    await vscode.window.showTextDocument(document);
 
-  await vscode.commands.executeCommand(
-    'simpleHtmlViewer.openPreview',
-    targetUri,
-  );
+    await vscode.commands.executeCommand(
+      'simpleHtmlViewer.openPreview',
+      targetUri,
+    );
 
-  const previewTab = await waitFor(() => findPreviewTab());
-  assert.equal(previewTab.input.viewType, PREVIEW_VIEW_TYPE);
-  assert.match(previewTab.label, /user-test\.html/i);
+    const previewTab = await waitFor(() => findPreviewTab());
+    assert.equal(previewTab.input.viewType, PREVIEW_VIEW_TYPE);
+    assert.match(previewTab.label, /\.smoke-.*\.html/i);
 
-  await vscode.commands.executeCommand(
-    'simpleHtmlViewer.refreshPreview',
-    targetUri,
-  );
+    const initialRenderCount = await waitFor(async () => {
+      const count = await vscode.commands.executeCommand(
+        'simpleHtmlViewer._test.getRenderCount',
+        targetUri,
+      );
+      return count > 0 ? count : undefined;
+    });
 
-  await closeAllEditors();
+    const initialRenderedHtml = await vscode.commands.executeCommand(
+      'simpleHtmlViewer._test.getLastRenderedHtml',
+      targetUri,
+    );
+    assert.match(initialRenderedHtml, /Simple HTML Viewer Test Document/);
+
+    await vscode.commands.executeCommand(
+      'simpleHtmlViewer._test.setZoom',
+      targetUri,
+      140,
+    );
+    assert.equal(
+      await vscode.commands.executeCommand(
+        'simpleHtmlViewer._test.getZoom',
+        targetUri,
+      ),
+      140,
+    );
+
+    await closeAllEditors();
+
+    const reopenedDocument = await vscode.workspace.openTextDocument(targetUri);
+    await vscode.window.showTextDocument(reopenedDocument);
+    await vscode.commands.executeCommand(
+      'simpleHtmlViewer.openPreview',
+      targetUri,
+    );
+
+    await waitFor(() => findPreviewTab());
+
+    const zoomRenderedHtml = await waitFor(async () => {
+      const html = await vscode.commands.executeCommand(
+        'simpleHtmlViewer._test.getLastRenderedHtml',
+        targetUri,
+      );
+      return html && html.includes('simple-html-viewer-zoom-label">140%')
+        ? html
+        : undefined;
+    });
+    assert.match(zoomRenderedHtml, /simple-html-viewer-zoom-label">140%/);
+
+    const editor = await vscode.window.showTextDocument(reopenedDocument);
+    await editor.edit((editBuilder) => {
+      const fullRange = new vscode.Range(
+        reopenedDocument.positionAt(0),
+        reopenedDocument.positionAt(reopenedDocument.getText().length),
+      );
+      editBuilder.replace(
+        fullRange,
+        reopenedDocument
+          .getText()
+          .replace('Simple HTML Viewer Test Document', UPDATED_TITLE),
+      );
+    });
+    await reopenedDocument.save();
+
+    const refreshedRenderCount = await waitFor(async () => {
+      const count = await vscode.commands.executeCommand(
+        'simpleHtmlViewer._test.getRenderCount',
+        targetUri,
+      );
+      return count > initialRenderCount ? count : undefined;
+    });
+    assert(refreshedRenderCount > initialRenderCount);
+
+    const refreshedHtml = await waitFor(async () => {
+      const html = await vscode.commands.executeCommand(
+        'simpleHtmlViewer._test.getLastRenderedHtml',
+        targetUri,
+      );
+      return html && html.includes(UPDATED_TITLE) ? html : undefined;
+    });
+    assert.match(refreshedHtml, /Simple HTML Viewer Test Document Updated/);
+
+    await vscode.workspace.fs.delete(targetUri);
+    await closeAllEditors();
+  } finally {
+    await closeAllEditors();
+    await vscode.workspace.fs.delete(targetUri).catch(() => undefined);
+  }
 }
 
 module.exports = {

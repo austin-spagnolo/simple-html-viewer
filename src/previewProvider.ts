@@ -19,6 +19,8 @@ type WebviewMessage =
 export class HtmlPreviewProvider implements vscode.CustomReadonlyEditorProvider {
   public static readonly viewType = 'simpleHtmlViewer.preview';
   private readonly panels = new Map<string, Set<vscode.WebviewPanel>>();
+  private readonly renderCounts = new Map<string, number>();
+  private readonly lastRenderedHtml = new Map<string, string>();
 
   public constructor(private readonly context: vscode.ExtensionContext) {}
 
@@ -111,6 +113,31 @@ export class HtmlPreviewProvider implements vscode.CustomReadonlyEditorProvider 
     }
   }
 
+  public async testSetZoom(uri: vscode.Uri, zoom: number): Promise<void> {
+    await this.setZoom(uri, zoom);
+
+    const panels = this.panels.get(this.panelKey(uri));
+    if (!panels) {
+      return;
+    }
+
+    for (const panel of panels) {
+      await this.sendZoom(panel, uri);
+    }
+  }
+
+  public testGetZoom(uri: vscode.Uri): number {
+    return this.getStoredZoom(uri);
+  }
+
+  public testGetRenderCount(uri: vscode.Uri): number {
+    return this.renderCounts.get(this.panelKey(uri)) ?? 0;
+  }
+
+  public testGetLastRenderedHtml(uri: vscode.Uri): string | undefined {
+    return this.lastRenderedHtml.get(this.panelKey(uri));
+  }
+
   private registerPanel(uri: vscode.Uri, panel: vscode.WebviewPanel): void {
     const key = this.panelKey(uri);
     const panels = this.panels.get(key) ?? new Set<vscode.WebviewPanel>();
@@ -138,13 +165,15 @@ export class HtmlPreviewProvider implements vscode.CustomReadonlyEditorProvider 
     const bytes = await vscode.workspace.fs.readFile(documentUri);
     const sourceHtml = new TextDecoder('utf-8').decode(bytes);
     const zoom = this.getStoredZoom(documentUri);
-    panel.webview.html = await this.getWebviewHtml(
+    const renderedHtml = await this.getWebviewHtml(
       panel.webview,
       documentUri,
       sourceHtml,
       zoom,
       this.getAutoRefreshMode(),
     );
+    panel.webview.html = renderedHtml;
+    this.trackRender(documentUri, renderedHtml);
   }
 
   private async adjustZoom(
@@ -182,6 +211,12 @@ export class HtmlPreviewProvider implements vscode.CustomReadonlyEditorProvider 
 
   private panelKey(uri: vscode.Uri): string {
     return uri.toString();
+  }
+
+  private trackRender(uri: vscode.Uri, html: string): void {
+    const key = this.panelKey(uri);
+    this.renderCounts.set(key, (this.renderCounts.get(key) ?? 0) + 1);
+    this.lastRenderedHtml.set(key, html);
   }
 
   private zoomStateKey(uri: vscode.Uri): string {
