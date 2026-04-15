@@ -133,7 +133,7 @@ export class HtmlPreviewProvider implements vscode.CustomReadonlyEditorProvider 
     const bytes = await vscode.workspace.fs.readFile(documentUri);
     const sourceHtml = new TextDecoder('utf-8').decode(bytes);
     const zoom = this.getStoredZoom(documentUri);
-    panel.webview.html = this.getWebviewHtml(
+    panel.webview.html = await this.getWebviewHtml(
       panel.webview,
       documentUri,
       sourceHtml,
@@ -208,23 +208,24 @@ export class HtmlPreviewProvider implements vscode.CustomReadonlyEditorProvider 
       .get<number>('defaultZoom', 100);
   }
 
-  private prepareHtmlForPreview(
+  private async prepareHtmlForPreview(
     webview: vscode.Webview,
     documentUri: vscode.Uri,
     html: string,
-  ): string {
+  ): Promise<string> {
+    const normalizedHtml = this.normalizeHtmlForPreview(html);
     const previewCsp = [
       `default-src 'none';`,
       `img-src ${webview.cspSource} data: blob: https: http:;`,
-      `style-src ${webview.cspSource} 'unsafe-inline' https: http:;`,
-      `script-src ${webview.cspSource} 'unsafe-inline' 'unsafe-eval' https: http:;`,
+      `style-src ${webview.cspSource} 'unsafe-inline' data: https: http:;`,
+      `script-src ${webview.cspSource} 'unsafe-inline' 'unsafe-eval' data: https: http:;`,
       `font-src ${webview.cspSource} data: blob: https: http:;`,
       `connect-src ${webview.cspSource} data: blob: https: http: ws: wss:;`,
       `worker-src ${webview.cspSource} data: blob: https: http:;`,
     ].join(' ');
 
     const withCsp = this.injectIntoHead(
-      html,
+      normalizedHtml,
       `<meta http-equiv="Content-Security-Policy" content="${previewCsp}">`,
     );
 
@@ -253,6 +254,10 @@ export class HtmlPreviewProvider implements vscode.CustomReadonlyEditorProvider 
     );
   }
 
+  private normalizeHtmlForPreview(html: string): string {
+    return html.replace(/\shtml-widget-static-bound\b/g, '');
+  }
+
   private injectIntoHead(html: string, tag: string): string {
     if (/<head(\s[^>]*)?>/i.test(html)) {
       return html.replace(/<head(\s[^>]*)?>/i, (match) => `${match}${tag}`);
@@ -278,23 +283,23 @@ export class HtmlPreviewProvider implements vscode.CustomReadonlyEditorProvider 
     );
   }
 
-  private getWebviewHtml(
+  private async getWebviewHtml(
     webview: vscode.Webview,
     documentUri: vscode.Uri,
     sourceHtml: string,
     zoom: number,
     autoRefreshMode: AutoRefreshMode,
-  ): string {
+  ): Promise<string> {
     const nonce = this.createNonce();
     const stylesUri = webview.asWebviewUri(
       vscode.Uri.joinPath(this.context.extensionUri, 'media', 'preview.css'),
     );
-    const preparedHtml = this.prepareHtmlForPreview(
+    const preparedHtml = await this.prepareHtmlForPreview(
       webview,
       documentUri,
       sourceHtml,
     );
-    const toolbarStart = `
+    const toolbar = `
 <div id="simple-html-viewer-root">
   <div id="simple-html-viewer-toolbar" data-simple-html-viewer-toolbar>
     <button id="simple-html-viewer-zoom-out" class="simple-html-viewer-button" type="button" aria-label="Zoom out">-</button>
@@ -305,20 +310,46 @@ export class HtmlPreviewProvider implements vscode.CustomReadonlyEditorProvider 
       autoRefreshMode === 'off' ? '' : ' hidden'
     }" type="button">refresh</button>
   </div>
-  <div id="simple-html-viewer-scroll">
-    <div id="simple-html-viewer-content" data-simple-html-viewer-content>
-`;
-    const toolbarEnd = `
-    </div>
-  </div>
 </div>
+<div id="simple-html-viewer-offset" aria-hidden="true"></div>
 <script nonce="${nonce}">
   const vscode = acquireVsCodeApi();
-  const content = document.getElementById('simple-html-viewer-content');
   const zoomLabel = document.getElementById('simple-html-viewer-zoom-label');
-  const applyZoom = () => {
-    content.style.zoom = '${zoom / 100}';
-    zoomLabel.textContent = '${zoom}%';
+  const zoomStyleId = 'simple-html-viewer-page-zoom-style';
+  const root = document.getElementById('simple-html-viewer-root');
+  const offset = document.getElementById('simple-html-viewer-offset');
+  const ensureStyle = (styleId) => {
+    let style = document.getElementById(styleId);
+    if (!(style instanceof HTMLStyleElement)) {
+      style = document.createElement('style');
+      style.id = styleId;
+      document.head.appendChild(style);
+    }
+    return style;
+  };
+  const applyLayoutOffset = () => {
+    if (!(root instanceof HTMLElement) || !(offset instanceof HTMLElement)) {
+      return;
+    }
+
+    const rootStyle = window.getComputedStyle(root);
+    const reservedHeight =
+      Math.ceil(root.getBoundingClientRect().height) +
+      parseFloat(rootStyle.top || '0') +
+      8;
+    offset.style.height = String(reservedHeight) + 'px';
+    document.documentElement.style.scrollPaddingTop =
+      String(reservedHeight) + 'px';
+  };
+  const applyZoom = (value) => {
+    const style = ensureStyle(zoomStyleId);
+    style.textContent =
+      value === 100
+        ? ''
+        : 'body > :not(#simple-html-viewer-root):not(#simple-html-viewer-offset):not(script):not(style) { zoom: ' +
+            String(value / 100) +
+            '; }';
+    zoomLabel.textContent = value + '%';
   };
 
   document.getElementById('simple-html-viewer-zoom-out')?.addEventListener('click', () => {
@@ -340,12 +371,15 @@ export class HtmlPreviewProvider implements vscode.CustomReadonlyEditorProvider 
   window.addEventListener('message', (event) => {
     const message = event.data;
     if (message?.type === 'setZoom') {
-      content.style.zoom = String(message.zoom / 100);
-      zoomLabel.textContent = message.zoom + '%';
+      applyZoom(message.zoom);
     }
   });
 
-  applyZoom();
+  window.addEventListener('load', applyLayoutOffset);
+  window.addEventListener('resize', applyLayoutOffset);
+  requestAnimationFrame(applyLayoutOffset);
+
+  applyZoom(${zoom});
   vscode.postMessage({ type: 'ready' });
 </script>
 `;
@@ -354,16 +388,17 @@ export class HtmlPreviewProvider implements vscode.CustomReadonlyEditorProvider 
       preparedHtml,
       `<link href="${stylesUri}" rel="stylesheet">`,
     );
-    const withBodyStart = withStylesheet.replace(
+
+    const withToolbar = withStylesheet.replace(
       /<body(\s[^>]*)?>/i,
-      (match) => `${match}${toolbarStart}`,
+      (match) => `${match}${toolbar}`,
     );
 
-    if (withBodyStart !== withStylesheet) {
-      return withBodyStart.replace(/<\/body>/i, `${toolbarEnd}</body>`);
+    if (withToolbar !== withStylesheet) {
+      return withToolbar;
     }
 
-    return `<!DOCTYPE html><html><head><link href="${stylesUri}" rel="stylesheet"></head><body>${toolbarStart}${preparedHtml}${toolbarEnd}</body></html>`;
+    return `<!DOCTYPE html><html><head><link href="${stylesUri}" rel="stylesheet"></head><body>${toolbar}${preparedHtml}</body></html>`;
   }
 
   private createNonce(): string {
