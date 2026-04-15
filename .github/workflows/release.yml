@@ -88,7 +88,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          body="$(gh release view "${{ github.event.inputs.tag }}" --json body --jq .body --repo "${{ github.repository }}")"
+          body="$(gh release view "${{ github.event.inputs.tag }}" --json body --jq '.body // ""' --repo "${{ github.repository }}")"
           if printf '%s' "$body" | grep -q "${MARKETPLACE_PUBLISHED_MARKER}"; then
             echo "Marketplace publish has already completed for tag ${{ github.event.inputs.tag }}."
             exit 1
@@ -105,9 +105,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          body="$(gh release view "${{ github.event.inputs.tag }}" --json body --jq .body --repo "${{ github.repository }}")"
-          updated_body="${body}
-
-# ${MARKETPLACE_PUBLISHED_MARKER}
-# Marketplace publish completed."
-#           gh release edit "${{ github.event.inputs.tag }}" --notes "$updated_body" --repo "${{ github.repository }}"
+          body="$(gh release view "${{ github.event.inputs.tag }}" --json body --jq '.body // ""' --repo "${{ github.repository }}")"
+          notes_file="$(mktemp)"
+          printf '%s\n' "$body" > "$notes_file"
+          printf '\n%s\n%s\n' "${MARKETPLACE_PUBLISHED_MARKER}" "Marketplace publish completed." >> "$notes_file"
+          gh release edit "${{ github.event.inputs.tag }}" --notes-file "$notes_file" --repo "${{ github.repository }}"
