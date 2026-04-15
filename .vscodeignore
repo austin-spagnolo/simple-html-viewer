@@ -3,7 +3,9 @@
 docs/**
 test/**
 src/**
+.gitignore
 .eslintrc.json
+eslint.config.js
 .prettierrc.json
 tsconfig.json
-
+dist/**/*.map

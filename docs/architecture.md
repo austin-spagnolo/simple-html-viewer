@@ -22,9 +22,10 @@ The extension uses a VS Code readonly custom editor backed by a webview. This av
 ### HTML document rendering
 
 - Reads the selected HTML file as text.
-- Rewrites relative `src` and `href` resource references to `webview.asWebviewUri(...)` values.
+- Rewrites resource-bearing HTML attributes such as `src`, `href`, `srcset`, `poster`, and `data` to `webview.asWebviewUri(...)` values using a tag-aware scanner instead of global string replacement.
 - Injects a preview-specific Content Security Policy that allows local rewritten assets, inline scripts, and remote resources such as Plotly CDN.
 - Rebuilds the final preview document as a single webview HTML document so interactive content runs in the same DOM as the toolbar and content surface.
+- Applies a narrow saved-page normalization step for stale HTML widget binding classes captured by "Save page as" artifacts.
 
 ## Remote Support Strategy
 

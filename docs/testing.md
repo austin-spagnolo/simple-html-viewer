@@ -18,6 +18,8 @@
 - Click the sortable table headers and verify row ordering changes.
 - Verify the Plotly chart renders.
 - Hover or interact with the Plotly chart and verify tooltips/interaction still work.
+- Change zoom and verify responsive widgets such as Plotly relayout immediately without requiring a pane resize.
+- Open a saved complex HTML page with a companion asset folder and verify local scripts and styles still load.
 
 ## Refresh
 
@@ -32,6 +34,7 @@
 - Verify `-` decreases zoom.
 - Verify `reset` returns to the configured default zoom.
 - Verify zoom changes do not affect VS Code application zoom.
+- Verify the toolbar does not cover the top of the document and the reserved gap remains visually stable as zoom changes.
 
 ## Remote
 
