@@ -112,6 +112,7 @@
     "package": "vsce package --githubBranch master",
     "package:vsix": "vsce package --githubBranch master",
     "publish:check": "npm run check && npm run package:vsix",
+    "test": "npm run build && node test/previewTransform.test.js",
     "vscode:prepublish": "npm run build"
   },
   "devDependencies": {
