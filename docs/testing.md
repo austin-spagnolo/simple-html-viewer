@@ -1,5 +1,10 @@
 # Testing Guide
 
+## Automated
+
+- Run `npm run test` for fast regression checks around HTML rewriting and saved-page normalization.
+- Run `npm run test:smoke` for extension-host smoke coverage of command registration and opening the custom preview editor.
+
 ## Baseline
 
 - Launch the extension with `F5`.

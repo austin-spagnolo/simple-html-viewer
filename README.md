@@ -48,6 +48,8 @@ Open any `.html` or `.htm` file and use one of these entry points:
 ```bash
 npm install
 npm run check
+npm run test
+npm run test:smoke
 npm run package:vsix
 ```
 

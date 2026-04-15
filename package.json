@@ -17,8 +17,17 @@
   "engines": {
     "vscode": "^1.98.0"
   },
-  "categories": ["Visualization", "Other"],
-  "keywords": ["html", "preview", "webview", "plotly", "javascript"],
+  "categories": [
+    "Visualization",
+    "Other"
+  ],
+  "keywords": [
+    "html",
+    "preview",
+    "webview",
+    "plotly",
+    "javascript"
+  ],
   "galleryBanner": {
     "color": "#1f1f1f",
     "theme": "dark"
@@ -27,7 +36,9 @@
   "markdown": "github",
   "pricing": "Free",
   "main": "./dist/extension.js",
-  "extensionKind": ["workspace"],
+  "extensionKind": [
+    "workspace"
+  ],
   "icon": "media/icon.png",
   "activationEvents": [
     "onCommand:simpleHtmlViewer.openPreview",
@@ -52,7 +63,10 @@
       "properties": {
         "simpleHtmlViewer.autoRefresh": {
           "type": "string",
-          "enum": ["onSave", "off"],
+          "enum": [
+            "onSave",
+            "off"
+          ],
           "default": "onSave",
           "markdownDescription": "Controls when the HTML preview refreshes automatically. When set to `off`, the preview shows a toolbar refresh button."
         },
@@ -112,18 +126,22 @@
     "package": "vsce package --githubBranch master",
     "package:vsix": "vsce package --githubBranch master",
     "publish:check": "npm run check && npm run package:vsix",
-    "test": "npm run build && node test/previewTransform.test.js",
+    "test": "npm run test:unit",
+    "test:smoke": "npm run build && node test/smoke/runSmokeTests.js",
+    "test:unit": "npm run build && node test/previewTransform.test.js",
     "vscode:prepublish": "npm run build"
   },
   "devDependencies": {
+    "@vscode/test-electron": "^2.5.2",
     "@types/node": "^22.13.10",
     "@types/vscode": "^1.98.0",
     "@typescript-eslint/eslint-plugin": "^8.26.1",
     "@typescript-eslint/parser": "^8.26.1",
+    "@vscode/test-electron": "^2.5.2",
+    "@vscode/vsce": "^3.2.2",
     "eslint": "^9.22.0",
     "eslint-config-prettier": "^10.0.1",
     "prettier": "^3.5.3",
-    "typescript": "^5.8.2",
-    "@vscode/vsce": "^3.2.2"
+    "typescript": "^5.8.2"
   }
 }
