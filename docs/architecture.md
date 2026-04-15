@@ -48,7 +48,7 @@ Planned future enhancement:
 
 - A configurable global default zoom is provided through extension settings.
 - Each open preview maintains its current zoom independently from VS Code application zoom.
-- Zoom is applied inside the webview document using Chromium-backed CSS zoom behavior rather than reloading the page for every zoom change.
+- Zoom is applied inside the webview document by scaling a dedicated preview content wrapper and synchronizing its measured layout box.
 - Toolbar actions update the current preview immediately while preserving the page state of interactive content.
 
 ## Tradeoffs

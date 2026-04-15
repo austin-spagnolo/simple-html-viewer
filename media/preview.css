@@ -33,6 +33,16 @@
   pointer-events: none;
 }
 
+#simple-html-viewer-content-shell {
+  display: block;
+  width: 100%;
+}
+
+#simple-html-viewer-content {
+  display: block;
+  transform-origin: top left;
+}
+
 #simple-html-viewer-toolbar {
   all: initial;
   box-sizing: border-box;

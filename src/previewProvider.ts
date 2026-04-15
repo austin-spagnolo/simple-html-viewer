@@ -240,6 +240,23 @@ export class HtmlPreviewProvider implements vscode.CustomReadonlyEditorProvider 
     return `<!DOCTYPE html><html><head>${tag}</head><body>${html}</body></html>`;
   }
 
+  private wrapBodyContent(html: string, prefix: string, suffix: string): string {
+    if (/<body(\s[^>]*)?>/i.test(html)) {
+      const withPrefix = html.replace(
+        /<body(\s[^>]*)?>/i,
+        (match) => `${match}${prefix}`,
+      );
+
+      if (/<\/body>/i.test(withPrefix)) {
+        return withPrefix.replace(/<\/body>/i, `${suffix}</body>`);
+      }
+
+      return `${withPrefix}${suffix}`;
+    }
+
+    return `<!DOCTYPE html><html><head></head><body>${prefix}${html}${suffix}</body></html>`;
+  }
+
   private rewriteHtmlForPreview(
     webview: vscode.Webview,
     documentUri: vscode.Uri,
@@ -676,7 +693,7 @@ export class HtmlPreviewProvider implements vscode.CustomReadonlyEditorProvider 
       documentUri,
       sourceHtml,
     );
-    const toolbar = `
+    const toolbarPrefix = `
 <div id="simple-html-viewer-root">
   <div id="simple-html-viewer-toolbar" data-simple-html-viewer-toolbar>
     <button id="simple-html-viewer-zoom-out" class="simple-html-viewer-button" type="button" aria-label="Zoom out">-</button>
@@ -689,20 +706,25 @@ export class HtmlPreviewProvider implements vscode.CustomReadonlyEditorProvider 
   </div>
 </div>
 <div id="simple-html-viewer-offset" aria-hidden="true"></div>
+<div id="simple-html-viewer-content-shell">
+  <div id="simple-html-viewer-content">
+`;
+    const toolbarSuffix = `
+  </div>
+</div>
 <script nonce="${nonce}">
   const vscode = acquireVsCodeApi();
   const zoomLabel = document.getElementById('simple-html-viewer-zoom-label');
-  const zoomStyleId = 'simple-html-viewer-page-zoom-style';
   const root = document.getElementById('simple-html-viewer-root');
   const offset = document.getElementById('simple-html-viewer-offset');
-  const ensureStyle = (styleId) => {
-    let style = document.getElementById(styleId);
-    if (!(style instanceof HTMLStyleElement)) {
-      style = document.createElement('style');
-      style.id = styleId;
-      document.head.appendChild(style);
+  const contentShell = document.getElementById('simple-html-viewer-content-shell');
+  const content = document.getElementById('simple-html-viewer-content');
+  const syncScaledContentBounds = () => {
+    if (!(contentShell instanceof HTMLElement) || !(content instanceof HTMLElement)) {
+      return;
     }
-    return style;
+
+    contentShell.style.height = String(Math.ceil(content.getBoundingClientRect().height)) + 'px';
   };
   const applyLayoutOffset = () => {
     if (!(root instanceof HTMLElement) || !(offset instanceof HTMLElement)) {
@@ -724,19 +746,23 @@ export class HtmlPreviewProvider implements vscode.CustomReadonlyEditorProvider 
     };
 
     requestAnimationFrame(() => {
+      syncScaledContentBounds();
       applyLayoutOffset();
       dispatchResize();
-      requestAnimationFrame(dispatchResize);
+      requestAnimationFrame(() => {
+        syncScaledContentBounds();
+        dispatchResize();
+      });
     });
   };
   const applyZoom = (value) => {
-    const style = ensureStyle(zoomStyleId);
-    style.textContent =
-      value === 100
-        ? ''
-        : 'body > :not(#simple-html-viewer-root):not(#simple-html-viewer-offset):not(script):not(style) { zoom: ' +
-            String(value / 100) +
-            '; }';
+    if (content instanceof HTMLElement) {
+      const scale = value / 100;
+      content.style.transformOrigin = 'top left';
+      content.style.transform = value === 100 ? '' : 'scale(' + String(scale) + ')';
+      content.style.width = value === 100 ? '' : String(100 / scale) + '%';
+    }
+
     zoomLabel.textContent = value + '%';
     notifyResponsiveLayout();
   };
@@ -764,30 +790,39 @@ export class HtmlPreviewProvider implements vscode.CustomReadonlyEditorProvider 
     }
   });
 
-  window.addEventListener('load', applyLayoutOffset);
-  window.addEventListener('resize', applyLayoutOffset);
-  requestAnimationFrame(applyLayoutOffset);
+  if (typeof ResizeObserver !== 'undefined' && content instanceof HTMLElement) {
+    const resizeObserver = new ResizeObserver(() => {
+      syncScaledContentBounds();
+    });
+    resizeObserver.observe(content);
+  }
+
+  const syncChromeLayout = () => {
+    syncScaledContentBounds();
+    applyLayoutOffset();
+  };
+
+  window.addEventListener('load', syncChromeLayout);
+  window.addEventListener('resize', syncChromeLayout);
+  requestAnimationFrame(syncChromeLayout);
 
   applyZoom(${zoom});
   vscode.postMessage({ type: 'ready' });
 </script>
 `;
 
-    const withStylesheet = this.injectIntoHead(
+    const wrappedHtml = this.wrapBodyContent(
       preparedHtml,
+      toolbarPrefix,
+      toolbarSuffix,
+    );
+
+    const withStylesheet = this.injectIntoHead(
+      wrappedHtml,
       `<link href="${stylesUri}" rel="stylesheet">`,
     );
 
-    const withToolbar = withStylesheet.replace(
-      /<body(\s[^>]*)?>/i,
-      (match) => `${match}${toolbar}`,
-    );
-
-    if (withToolbar !== withStylesheet) {
-      return withToolbar;
-    }
-
-    return `<!DOCTYPE html><html><head><link href="${stylesUri}" rel="stylesheet"></head><body>${toolbar}${preparedHtml}</body></html>`;
+    return withStylesheet;
   }
 
   private createNonce(): string {

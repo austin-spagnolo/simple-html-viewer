@@ -19,6 +19,7 @@
 - Verify the Plotly chart renders.
 - Hover or interact with the Plotly chart and verify tooltips/interaction still work.
 - Change zoom and verify responsive widgets such as Plotly relayout immediately without requiring a pane resize.
+- At non-default zoom levels, verify the Plotly hover point stays aligned with the mouse pointer.
 - Open a saved complex HTML page with a companion asset folder and verify local scripts and styles still load.
 
 ## Refresh
