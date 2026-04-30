@@ -49,7 +49,11 @@ async function closeAllEditors() {
 
 async function createSmokeFixture() {
   const workspaceRoot = vscode.workspace.workspaceFolders[0].uri;
-  const sourceUri = vscode.Uri.joinPath(workspaceRoot, 'test', 'user-test.html');
+  const sourceUri = vscode.Uri.joinPath(
+    workspaceRoot,
+    'test',
+    'user-test.html',
+  );
   const fixtureUri = vscode.Uri.joinPath(
     workspaceRoot,
     'test',

@@ -50,7 +50,9 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand(
       'simpleHtmlViewer.refreshPreview',
       async (resource?: vscode.Uri) => {
-        provider.refresh(resource ?? vscode.window.activeTextEditor?.document.uri);
+        provider.refresh(
+          resource ?? vscode.window.activeTextEditor?.document.uri,
+        );
       },
     ),
   );

@@ -4,17 +4,12 @@
     {
       "type": "shell",
       "command": "C:\\Program Files\\nodejs\\npm.cmd",
-      "args": [
-        "run",
-        "build"
-      ],
+      "args": ["run", "build"],
       "group": {
         "kind": "build",
         "isDefault": true
       },
-      "problemMatcher": [
-        "$tsc"
-      ],
+      "problemMatcher": ["$tsc"],
       "label": "npm: build"
     }
   ]

@@ -1,80 +1,78 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Simple HTML Viewer Test</title>
+    <link rel="stylesheet" href="./assets/styles.css" />
+    <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+  </head>
 
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Simple HTML Viewer Test</title>
-  <link rel="stylesheet" href="./assets/styles.css">
-  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
-</head>
+  <body>
+    <h1>Simple HTML Viewer Test Document</h1>
 
-<body>
-  <h1>Simple HTML Viewer Test Document</h1>
+    <section class="card">
+      <h2>Embedded JavaScript</h2>
+      <p>This button prves inline script execution works:</p>
+      <button id="counter-button" type="button">Clicked 0 times</button>
+    </section>
 
-  <section class="card">
-    <h2>Embedded JavaScript</h2>
-    <p>This button prves inline script execution works:</p>
-    <button id="counter-button" type="button">Clicked 0 times</button>
-  </section>
+    <section class="card">
+      <h2>Sortable Table</h2>
+      <table data-sortable-table data-sort-direction="asc">
+        <thead>
+          <tr>
+            <th><button type="button" data-sort-column="0">Name</button></th>
+            <th><button type="button" data-sort-column="1">Score</button></th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Alpa</td>
+            <td>8</td>
+          </tr>
+          <tr>
+            <td>Gamma</td>
+            <td>3</td>
+          </tr>
+          <tr>
+            <td>Beta</td>
+            <td>12</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
 
-  <section class="card">
-    <h2>Sortable Table</h2>
-    <table data-sortable-table data-sort-direction="asc">
-      <thead>
-        <tr>
-          <th><button type="button" data-sort-column="0">Name</button></th>
-          <th><button type="button" data-sort-column="1">Score</button></th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr>
-          <td>Alpa</td>
-          <td>8</td>
-        </tr>
-        <tr>
-          <td>Gamma</td>
-          <td>3</td>
-        </tr>
-        <tr>
-          <td>Beta</td>
-          <td>12</td>
-        </tr>
-      </tbody>
-    </table>
-  </section>
+    <section class="card">
+      <h2>Plotly</h2>
+      <div id="plot" style="height: 360px; width: 100%"></div>
+    </section>
 
-  <section class="card">
-    <h2>Plotly</h2>
-    <div id="plot" style="height: 360px; width: 100%"></div>
-  </section>
+    <script src="./assets/sortable.js"></script>
+    <script>
+      let clickCount = 0;
+      const button = document.getElementById('counter-button');
+      button.addEventListener('click', () => {
+        clickCount += 1;
+        button.textContent = `Clicked ${clickCount} times`;
+      });
 
-  <script src="./assets/sortable.js"></script>
-  <script>
-    let clickCount = 0;
-    const button = document.getElementById('counter-button');
-    button.addEventListener('click', () => {
-      clickCount += 1;
-      button.textContent = `Clicked ${clickCount} times`;
-    });
-
-    Plotly.newPlot(
-      'plot',
-      [
+      Plotly.newPlot(
+        'plot',
+        [
+          {
+            x: ['Jan', 'Feb', 'Mar', 'Apr'],
+            y: [5, 9, 4, 11],
+            type: 'bar',
+          },
+        ],
         {
-          x: ['Jan', 'Feb', 'Mar', 'Apr'],
-          y: [5, 9, 4, 11],
-          type: 'bar',
+          title: 'Interactive Plotly Test',
         },
-      ],
-      {
-        title: 'Interactive Plotly Test',
-      },
-      {
-        responsive: true,
-      },
-    );
-  </script>
-</body>
-
+        {
+          responsive: true,
+        },
+      );
+    </script>
+  </body>
 </html>

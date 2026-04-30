@@ -6,7 +6,8 @@ const {
   wrapBodyContent,
 } = require('../dist/previewTransform.js');
 
-const cspTag = '<meta http-equiv="Content-Security-Policy" content="default-src \'none\'">';
+const cspTag =
+  '<meta http-equiv="Content-Security-Policy" content="default-src \'none\'">';
 
 function rewriteLocalUri(uri) {
   return `webview:${uri}`;
@@ -26,14 +27,20 @@ runTest('injectIntoHead inserts tags into an existing head', () => {
   const html = '<html><head><title>Example</title></head><body></body></html>';
   const result = injectIntoHead(html, '<meta name="x" content="1">');
 
-  assert.match(result, /<head><meta name="x" content="1"><title>Example<\/title><\/head>/);
+  assert.match(
+    result,
+    /<head><meta name="x" content="1"><title>Example<\/title><\/head>/,
+  );
 });
 
 runTest('wrapBodyContent nests content inside the existing body', () => {
   const html = '<html><body><main>Hello</main></body></html>';
   const result = wrapBodyContent(html, '<div id="before">', '</div>');
 
-  assert.match(result, /<body><div id="before"><main>Hello<\/main><\/div><\/body>/);
+  assert.match(
+    result,
+    /<body><div id="before"><main>Hello<\/main><\/div><\/body>/,
+  );
 });
 
 runTest('preparePreviewHtml rewrites local href and src attributes', () => {
@@ -54,24 +61,33 @@ runTest('preparePreviewHtml rewrites local href and src attributes', () => {
     rewriteLocalUri,
   });
 
-  assert.match(result, /href="webview:file:\/\/\/workspace\/docs\/assets\/site\.css"/);
-  assert.match(result, /src="webview:file:\/\/\/workspace\/docs\/images\/chart\.png"/);
-});
-
-runTest('preparePreviewHtml rewrites srcset candidates but preserves descriptors', () => {
-  const html = '<img srcset="hero.png 1x, hero@2x.png 2x">';
-  const result = preparePreviewHtml({
-    cspTag,
-    documentUrl: 'file:///workspace/docs/page.html',
-    html,
-    rewriteLocalUri,
-  });
-
   assert.match(
     result,
-    /srcset="webview:file:\/\/\/workspace\/docs\/hero\.png 1x, webview:file:\/\/\/workspace\/docs\/hero@2x\.png 2x"/,
+    /href="webview:file:\/\/\/workspace\/docs\/assets\/site\.css"/,
+  );
+  assert.match(
+    result,
+    /src="webview:file:\/\/\/workspace\/docs\/images\/chart\.png"/,
   );
 });
+
+runTest(
+  'preparePreviewHtml rewrites srcset candidates but preserves descriptors',
+  () => {
+    const html = '<img srcset="hero.png 1x, hero@2x.png 2x">';
+    const result = preparePreviewHtml({
+      cspTag,
+      documentUrl: 'file:///workspace/docs/page.html',
+      html,
+      rewriteLocalUri,
+    });
+
+    assert.match(
+      result,
+      /srcset="webview:file:\/\/\/workspace\/docs\/hero\.png 1x, webview:file:\/\/\/workspace\/docs\/hero@2x\.png 2x"/,
+    );
+  },
+);
 
 runTest('preparePreviewHtml respects base href for relative assets', () => {
   const html = `
@@ -92,7 +108,10 @@ runTest('preparePreviewHtml respects base href for relative assets', () => {
     rewriteLocalUri,
   });
 
-  assert.match(result, /src="webview:file:\/\/\/workspace\/docs\/static\/plot\.png"/);
+  assert.match(
+    result,
+    /src="webview:file:\/\/\/workspace\/docs\/static\/plot\.png"/,
+  );
 });
 
 runTest('preparePreviewHtml leaves inline script strings untouched', () => {
@@ -114,12 +133,19 @@ runTest('preparePreviewHtml leaves inline script strings untouched', () => {
     rewriteLocalUri,
   });
 
-  assert.match(result, /const template = '<img src="images\/not-a-real-tag\.png">';/);
-  assert.doesNotMatch(result, /webview:file:\/\/\/workspace\/docs\/images\/not-a-real-tag\.png/);
+  assert.match(
+    result,
+    /const template = '<img src="images\/not-a-real-tag\.png">';/,
+  );
+  assert.doesNotMatch(
+    result,
+    /webview:file:\/\/\/workspace\/docs\/images\/not-a-real-tag\.png/,
+  );
 });
 
 runTest('preparePreviewHtml leaves comment text untouched', () => {
-  const html = '<!-- <img src="images/comment-only.png"> --><img src="images/real.png">';
+  const html =
+    '<!-- <img src="images/comment-only.png"> --><img src="images/real.png">';
   const result = preparePreviewHtml({
     cspTag,
     documentUrl: 'file:///workspace/docs/page.html',
@@ -128,25 +154,31 @@ runTest('preparePreviewHtml leaves comment text untouched', () => {
   });
 
   assert.match(result, /<!-- <img src="images\/comment-only\.png"> -->/);
-  assert.match(result, /src="webview:file:\/\/\/workspace\/docs\/images\/real\.png"/);
+  assert.match(
+    result,
+    /src="webview:file:\/\/\/workspace\/docs\/images\/real\.png"/,
+  );
 });
 
-runTest('preparePreviewHtml removes stale widget binding only from real widget classes', () => {
-  const html = `
+runTest(
+  'preparePreviewHtml removes stale widget binding only from real widget classes',
+  () => {
+    const html = `
     <div class="html-widget html-widget-static-bound plotly"></div>
     <div class="html-widget-static-bound only"></div>
   `;
 
-  const result = preparePreviewHtml({
-    cspTag,
-    documentUrl: 'file:///workspace/docs/page.html',
-    html,
-    rewriteLocalUri,
-  });
+    const result = preparePreviewHtml({
+      cspTag,
+      documentUrl: 'file:///workspace/docs/page.html',
+      html,
+      rewriteLocalUri,
+    });
 
-  assert.match(result, /class="html-widget plotly"/);
-  assert.match(result, /class="html-widget-static-bound only"/);
-});
+    assert.match(result, /class="html-widget plotly"/);
+    assert.match(result, /class="html-widget-static-bound only"/);
+  },
+);
 
 runTest('preparePreviewHtml leaves remote and anchor URLs unchanged', () => {
   const html = `

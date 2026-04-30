@@ -7,9 +7,7 @@ export interface PreviewTransformOptions {
   rewriteLocalUri: (uri: string) => string;
 }
 
-export function preparePreviewHtml(
-  options: PreviewTransformOptions,
-): string {
+export function preparePreviewHtml(options: PreviewTransformOptions): string {
   const withCsp = injectIntoHead(options.html, options.cspTag);
   return rewriteHtmlForPreview(
     withCsp,
@@ -317,11 +315,7 @@ function rewriteAttributeValueForPreview(
     return normalizedValue;
   }
 
-  return rewriteUrlForPreview(
-    currentBaseUrl,
-    normalizedValue,
-    rewriteLocalUri,
-  );
+  return rewriteUrlForPreview(currentBaseUrl, normalizedValue, rewriteLocalUri);
 }
 
 function normalizeAttributeValueForPreview(
