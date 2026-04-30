@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.0.3
+
+- Fixed dark-theme color leakage into light-themed HTML tables.
+- Fixed Plotly hover hit-testing after toolbar zoom by isolating preview scaling from the document coordinate space.
+
 ## 0.0.2
 
 - Added release gates for unit tests, extension-host smoke tests, and packaged VSIX smoke tests.
