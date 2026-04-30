@@ -2,7 +2,7 @@
   "name": "simple-html-viewer",
   "displayName": "Simple HTML Viewer",
   "description": "A minimal VS Code HTML viewer with interactive webview rendering and independent zoom controls.",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "publisher": "austin-spagnolo",
   "preview": true,
   "license": "SEE LICENSE IN LICENSE",
@@ -83,6 +83,21 @@
           "minimum": 10,
           "maximum": 500,
           "description": "Default zoom percentage for new previews."
+        },
+        "simpleHtmlViewer.activeContent": {
+          "type": "string",
+          "enum": [
+            "trustedWorkspaces",
+            "always",
+            "off"
+          ],
+          "default": "trustedWorkspaces",
+          "markdownDescription": "Controls whether previewed HTML can run scripts and load remote resources. `trustedWorkspaces` allows active content only when the workspace is trusted, `always` allows it in every workspace, and `off` blocks page scripts while keeping the preview toolbar active."
+        },
+        "simpleHtmlViewer.allowInsecureContent": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "Allows `http:` and `ws:` resources in active previews. Leave this disabled unless you trust the opened HTML and its network targets."
         }
       }
     },
@@ -122,17 +137,19 @@
     "build": "tsc -p ./",
     "check": "npm run lint && npm run build",
     "format": "prettier --write .",
+    "format:check": "prettier --check .",
     "lint": "eslint \"src/**/*.ts\"",
     "package": "vsce package --githubBranch master",
     "package:vsix": "vsce package --githubBranch master",
-    "publish:check": "npm run check && npm run package:vsix",
+    "publish:check": "npm run check && npm run test && npm run test:smoke && npm run test:smoke:vsix",
     "test": "npm run test:unit",
     "test:smoke": "npm run build && node test/smoke/runSmokeTests.js",
+    "test:smoke:vsix": "npm run package:vsix && node test/smoke/runSmokeTests.js --vsix",
+    "test:smoke:vsix:existing": "node test/smoke/runSmokeTests.js --vsix",
     "test:unit": "npm run build && node test/previewTransform.test.js",
     "vscode:prepublish": "npm run build"
   },
   "devDependencies": {
-    "@vscode/test-electron": "^2.5.2",
     "@types/node": "^22.13.10",
     "@types/vscode": "^1.98.0",
     "@typescript-eslint/eslint-plugin": "^8.26.1",

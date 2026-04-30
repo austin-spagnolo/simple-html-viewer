@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.0.2
+
+- Added release gates for unit tests, extension-host smoke tests, and packaged VSIX smoke tests.
+- Added active-content settings so script and remote-resource execution is gated by workspace trust by default.
+- Added a preview fallback for file read and render failures.
+
 ## 0.0.1
 
 - Initial project scaffold.

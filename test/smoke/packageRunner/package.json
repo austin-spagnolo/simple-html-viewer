@@ -1,0 +1,11 @@
+{
+  "name": "simple-html-viewer-package-smoke-runner",
+  "displayName": "Simple HTML Viewer Package Smoke Runner",
+  "version": "0.0.0",
+  "publisher": "austin-spagnolo",
+  "engines": {
+    "vscode": "^1.98.0"
+  },
+  "main": "./extension.js",
+  "activationEvents": []
+}

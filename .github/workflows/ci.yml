@@ -53,8 +53,11 @@ jobs:
       - name: Package VSIX
         run: npm run package
 
+      - name: Packaged VSIX smoke tests
+        run: xvfb-run -a npm run test:smoke:vsix:existing
+
       - name: Upload VSIX artifact
         uses: actions/upload-artifact@v6
         with:
           name: simple-html-viewer-vsix
-          path: "*.vsix"
+          path: '*.vsix'

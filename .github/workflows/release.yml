@@ -1,24 +1,24 @@
 name: Release
 
 env:
-  MARKETPLACE_PUBLISHED_MARKER: "<!-- marketplace-published -->"
+  MARKETPLACE_PUBLISHED_MARKER: '<!-- marketplace-published -->'
 
 on:
   workflow_dispatch:
     inputs:
       tag:
-        description: Git tag and GitHub Release version (for example v0.0.1)
+        description: Git tag and GitHub Release version (for example v0.0.2)
         required: true
-        default: "v0.0.1"
+        default: 'v0.0.2'
         type: string
       publish:
         description: Publish to the VS Code Marketplace
         required: true
-        default: "false"
+        default: 'false'
         type: choice
         options:
-          - "false"
-          - "true"
+          - 'false'
+          - 'true'
 
 jobs:
   release:
@@ -41,33 +41,59 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Validate release tag
+        run: |
+          expected_tag="v$(node -p "require('./package.json').version")"
+          if [ "${{ github.event.inputs.tag }}" != "$expected_tag" ]; then
+            echo "Release tag ${{ github.event.inputs.tag }} must match package.json version $expected_tag."
+            exit 1
+          fi
+
       - name: Lint
         run: npm run lint
 
-      - name: Build
-        run: npm run build
+      - name: Unit tests
+        run: npm run test
+
+      - name: Smoke tests
+        run: xvfb-run -a npm run test:smoke
 
       - name: Package VSIX
         run: npm run package:vsix
+
+      - name: Packaged VSIX smoke tests
+        run: xvfb-run -a npm run test:smoke:vsix:existing
 
       - name: Upload VSIX artifact
         uses: actions/upload-artifact@v6
         with:
           name: simple-html-viewer-release-vsix
-          path: "*.vsix"
+          path: '*.vsix'
 
       - name: Create Git tag if missing
         run: |
           if git rev-parse "${{ github.event.inputs.tag }}" >/dev/null 2>&1; then
-            echo "Tag already exists locally."
+            tag_sha="$(git rev-list -n 1 "${{ github.event.inputs.tag }}")"
+            head_sha="$(git rev-parse HEAD)"
+            if [ "$tag_sha" != "$head_sha" ]; then
+              echo "Tag ${{ github.event.inputs.tag }} points at $tag_sha, not current HEAD $head_sha."
+              exit 1
+            fi
+            echo "Tag already exists locally and points at HEAD."
           else
             git tag "${{ github.event.inputs.tag }}"
           fi
 
       - name: Push Git tag if missing on origin
         run: |
-          if git ls-remote --tags origin | grep "refs/tags/${{ github.event.inputs.tag }}$"; then
-            echo "Tag already exists on origin."
+          remote_tag_sha="$(git ls-remote --tags origin "refs/tags/${{ github.event.inputs.tag }}" | awk '{print $1}')"
+          head_sha="$(git rev-parse HEAD)"
+          if [ -n "$remote_tag_sha" ]; then
+            if [ "$remote_tag_sha" != "$head_sha" ]; then
+              echo "Remote tag ${{ github.event.inputs.tag }} points at $remote_tag_sha, not current HEAD $head_sha."
+              exit 1
+            fi
+            echo "Tag already exists on origin and points at HEAD."
           else
             git push origin "${{ github.event.inputs.tag }}"
           fi

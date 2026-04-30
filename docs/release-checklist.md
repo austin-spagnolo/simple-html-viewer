@@ -13,13 +13,16 @@
 ## Validation
 
 - Run `npm run check`.
-- Run `npm run package:vsix`.
+- Run `npm run test`.
+- Run `npm run test:smoke`.
+- Run `npm run test:smoke:vsix`.
 - Install the packaged `.vsix` locally and perform a final smoke test.
 - Run the testing guide in [testing.md](./testing.md).
 
 ## GitHub
 
 - Push the latest local commits to GitHub.
+- Confirm the Git tag matches `package.json` exactly, such as `v0.0.2` for version `0.0.2`.
 - Confirm the `CI` workflow runs on the default branch.
 - Use the manual `Release` workflow to create a GitHub Release and attach the packaged `.vsix`.
 - Set `publish` to `true` in the `Release` workflow when you also want to publish to the VS Code Marketplace.
