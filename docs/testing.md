@@ -4,6 +4,7 @@
 
 - Run `npm run test` for fast regression checks around HTML rewriting and saved-page normalization.
 - Run `npm run test:smoke` for extension-host smoke coverage of command registration and opening the custom preview editor.
+- Run `npm run test:smoke:vsix` to package the extension, install the VSIX into an isolated test profile, and verify the installed artifact activates.
 
 ## Baseline
 
@@ -41,6 +42,7 @@
 - Verify `reset` returns to the configured default zoom.
 - Verify zoom changes do not affect VS Code application zoom.
 - Verify the toolbar does not cover the top of the document and the reserved gap remains visually stable as zoom changes.
+- Verify a document-level floating or sticky table of contents remains anchored while scrolling at zoom levels above 100%.
 
 ## Remote
 

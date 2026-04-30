@@ -8,6 +8,12 @@ import {
 } from './previewTransform';
 
 type AutoRefreshMode = 'onSave' | 'off';
+type ActiveContentMode = 'trustedWorkspaces' | 'always' | 'off';
+
+interface PreviewSecurityPolicy {
+  activeContentAllowed: boolean;
+  insecureContentAllowed: boolean;
+}
 
 type WebviewMessage =
   | { type: 'zoomIn' }
@@ -16,7 +22,9 @@ type WebviewMessage =
   | { type: 'manualRefresh' }
   | { type: 'ready' };
 
-export class HtmlPreviewProvider implements vscode.CustomReadonlyEditorProvider {
+export class HtmlPreviewProvider
+  implements vscode.CustomReadonlyEditorProvider
+{
   public static readonly viewType = 'simpleHtmlViewer.preview';
   private readonly panels = new Map<string, Set<vscode.WebviewPanel>>();
   private readonly renderCounts = new Map<string, number>();
@@ -55,28 +63,30 @@ export class HtmlPreviewProvider implements vscode.CustomReadonlyEditorProvider 
 
     this.registerPanel(document.uri, webviewPanel);
 
-    webviewPanel.webview.onDidReceiveMessage(async (message: WebviewMessage) => {
-      switch (message.type) {
-        case 'manualRefresh':
-          await this.renderDocument(webviewPanel, document.uri);
-          break;
-        case 'zoomIn':
-          await this.adjustZoom(webviewPanel, document.uri, 1);
-          break;
-        case 'zoomOut':
-          await this.adjustZoom(webviewPanel, document.uri, -1);
-          break;
-        case 'zoomReset':
-          await this.setZoom(document.uri, this.getDefaultZoom());
-          await this.sendZoom(webviewPanel, document.uri);
-          break;
-        case 'ready':
-          await this.sendZoom(webviewPanel, document.uri);
-          break;
-        default:
-          break;
-      }
-    });
+    webviewPanel.webview.onDidReceiveMessage(
+      async (message: WebviewMessage) => {
+        switch (message.type) {
+          case 'manualRefresh':
+            await this.renderDocument(webviewPanel, document.uri);
+            break;
+          case 'zoomIn':
+            await this.adjustZoom(webviewPanel, document.uri, 1);
+            break;
+          case 'zoomOut':
+            await this.adjustZoom(webviewPanel, document.uri, -1);
+            break;
+          case 'zoomReset':
+            await this.setZoom(document.uri, this.getDefaultZoom());
+            await this.sendZoom(webviewPanel, document.uri);
+            break;
+          case 'ready':
+            await this.sendZoom(webviewPanel, document.uri);
+            break;
+          default:
+            break;
+        }
+      },
+    );
 
     webviewPanel.onDidDispose(() => {
       this.unregisterPanel(document.uri, webviewPanel);
@@ -162,18 +172,28 @@ export class HtmlPreviewProvider implements vscode.CustomReadonlyEditorProvider 
     panel: vscode.WebviewPanel,
     documentUri: vscode.Uri,
   ): Promise<void> {
-    const bytes = await vscode.workspace.fs.readFile(documentUri);
-    const sourceHtml = new TextDecoder('utf-8').decode(bytes);
-    const zoom = this.getStoredZoom(documentUri);
-    const renderedHtml = await this.getWebviewHtml(
-      panel.webview,
-      documentUri,
-      sourceHtml,
-      zoom,
-      this.getAutoRefreshMode(),
-    );
-    panel.webview.html = renderedHtml;
-    this.trackRender(documentUri, renderedHtml);
+    try {
+      const bytes = await vscode.workspace.fs.readFile(documentUri);
+      const sourceHtml = new TextDecoder('utf-8').decode(bytes);
+      const zoom = this.getStoredZoom(documentUri);
+      const renderedHtml = await this.getWebviewHtml(
+        panel.webview,
+        documentUri,
+        sourceHtml,
+        zoom,
+        this.getAutoRefreshMode(),
+      );
+      panel.webview.html = renderedHtml;
+      this.trackRender(documentUri, renderedHtml);
+    } catch (error) {
+      const message = this.getErrorMessage(error);
+      panel.webview.html = this.getErrorHtml(documentUri, message);
+      void vscode.window.showWarningMessage(
+        `Simple HTML Viewer could not preview ${path.basename(
+          documentUri.fsPath,
+        )}: ${message}`,
+      );
+    }
   }
 
   private async adjustZoom(
@@ -183,19 +203,13 @@ export class HtmlPreviewProvider implements vscode.CustomReadonlyEditorProvider 
   ): Promise<void> {
     const nextZoom = Math.max(
       10,
-      Math.min(
-        500,
-        this.getStoredZoom(uri) + direction * this.getZoomStep(),
-      ),
+      Math.min(500, this.getStoredZoom(uri) + direction * this.getZoomStep()),
     );
     await this.setZoom(uri, nextZoom);
     await this.sendZoom(panel, uri);
   }
 
-  private async setZoom(
-    uri: vscode.Uri,
-    zoom: number,
-  ): Promise<void> {
+  private async setZoom(uri: vscode.Uri, zoom: number): Promise<void> {
     await this.context.workspaceState.update(this.zoomStateKey(uri), zoom);
   }
 
@@ -248,23 +262,101 @@ export class HtmlPreviewProvider implements vscode.CustomReadonlyEditorProvider 
       .get<number>('defaultZoom', 100);
   }
 
+  private getActiveContentMode(): ActiveContentMode {
+    return vscode.workspace
+      .getConfiguration('simpleHtmlViewer')
+      .get<ActiveContentMode>('activeContent', 'trustedWorkspaces');
+  }
+
+  private getAllowInsecureContent(): boolean {
+    return vscode.workspace
+      .getConfiguration('simpleHtmlViewer')
+      .get<boolean>('allowInsecureContent', false);
+  }
+
+  private getPreviewSecurityPolicy(): PreviewSecurityPolicy {
+    const activeContentMode = this.getActiveContentMode();
+    const activeContentAllowed =
+      activeContentMode === 'always' ||
+      (activeContentMode === 'trustedWorkspaces' && vscode.workspace.isTrusted);
+
+    return {
+      activeContentAllowed,
+      insecureContentAllowed:
+        activeContentAllowed && this.getAllowInsecureContent(),
+    };
+  }
+
+  private createPreviewCsp(webview: vscode.Webview, nonce: string): string {
+    const securityPolicy = this.getPreviewSecurityPolicy();
+    const localSource = webview.cspSource;
+    const remoteResourceSources = securityPolicy.activeContentAllowed
+      ? ['https:', ...(securityPolicy.insecureContentAllowed ? ['http:'] : [])]
+      : [];
+    const remoteConnectionSources = securityPolicy.activeContentAllowed
+      ? [
+          'https:',
+          'wss:',
+          ...(securityPolicy.insecureContentAllowed ? ['http:', 'ws:'] : []),
+        ]
+      : [];
+    const scriptSources = securityPolicy.activeContentAllowed
+      ? [
+          localSource,
+          "'unsafe-inline'",
+          "'unsafe-eval'",
+          'data:',
+          'blob:',
+          ...remoteResourceSources,
+        ]
+      : [`'nonce-${nonce}'`];
+    const connectSources =
+      remoteConnectionSources.length > 0
+        ? [localSource, 'data:', 'blob:', ...remoteConnectionSources]
+        : ["'none'"];
+    const workerSources = securityPolicy.activeContentAllowed
+      ? [localSource, 'data:', 'blob:', ...remoteResourceSources]
+      : ["'none'"];
+    const directive = (name: string, sources: string[]) =>
+      `${name} ${sources.join(' ')};`;
+
+    return [
+      directive('default-src', ["'none'"]),
+      directive('img-src', [
+        localSource,
+        'data:',
+        'blob:',
+        ...remoteResourceSources,
+      ]),
+      directive('style-src', [
+        localSource,
+        "'unsafe-inline'",
+        'data:',
+        ...remoteResourceSources,
+      ]),
+      directive('script-src', scriptSources),
+      directive('font-src', [
+        localSource,
+        'data:',
+        'blob:',
+        ...remoteResourceSources,
+      ]),
+      directive('connect-src', connectSources),
+      directive('worker-src', workerSources),
+    ].join(' ');
+  }
+
   private async prepareHtmlForPreview(
     webview: vscode.Webview,
     documentUri: vscode.Uri,
     html: string,
+    nonce: string,
   ): Promise<string> {
-    const previewCsp = [
-      `default-src 'none';`,
-      `img-src ${webview.cspSource} data: blob: https: http:;`,
-      `style-src ${webview.cspSource} 'unsafe-inline' data: https: http:;`,
-      `script-src ${webview.cspSource} 'unsafe-inline' 'unsafe-eval' data: https: http:;`,
-      `font-src ${webview.cspSource} data: blob: https: http:;`,
-      `connect-src ${webview.cspSource} data: blob: https: http: ws: wss:;`,
-      `worker-src ${webview.cspSource} data: blob: https: http:;`,
-    ].join(' ');
-
     return preparePreviewHtml({
-      cspTag: `<meta http-equiv="Content-Security-Policy" content="${previewCsp}">`,
+      cspTag: `<meta http-equiv="Content-Security-Policy" content="${this.createPreviewCsp(
+        webview,
+        nonce,
+      )}">`,
       documentUrl: documentUri.toString(),
       html,
       rewriteLocalUri: (uri) =>
@@ -287,6 +379,7 @@ export class HtmlPreviewProvider implements vscode.CustomReadonlyEditorProvider 
       webview,
       documentUri,
       sourceHtml,
+      nonce,
     );
     const toolbarPrefix = `
 <div id="simple-html-viewer-root">
@@ -314,7 +407,7 @@ export class HtmlPreviewProvider implements vscode.CustomReadonlyEditorProvider 
   const offset = document.getElementById('simple-html-viewer-offset');
   const contentShell = document.getElementById('simple-html-viewer-content-shell');
   const content = document.getElementById('simple-html-viewer-content');
-  const syncScaledContentBounds = () => {
+  const syncContentBounds = () => {
     if (!(contentShell instanceof HTMLElement) || !(content instanceof HTMLElement)) {
       return;
     }
@@ -341,11 +434,11 @@ export class HtmlPreviewProvider implements vscode.CustomReadonlyEditorProvider 
     };
 
     requestAnimationFrame(() => {
-      syncScaledContentBounds();
+      syncContentBounds();
       applyLayoutOffset();
       dispatchResize();
       requestAnimationFrame(() => {
-        syncScaledContentBounds();
+        syncContentBounds();
         dispatchResize();
       });
     });
@@ -353,9 +446,8 @@ export class HtmlPreviewProvider implements vscode.CustomReadonlyEditorProvider 
   const applyZoom = (value) => {
     if (content instanceof HTMLElement) {
       const scale = value / 100;
-      content.style.transformOrigin = 'top left';
-      content.style.transform = value === 100 ? '' : 'scale(' + String(scale) + ')';
-      content.style.width = value === 100 ? '' : String(100 / scale) + '%';
+      content.style.zoom = value === 100 ? '' : String(scale);
+      content.style.removeProperty('width');
     }
 
     zoomLabel.textContent = value + '%';
@@ -387,13 +479,13 @@ export class HtmlPreviewProvider implements vscode.CustomReadonlyEditorProvider 
 
   if (typeof ResizeObserver !== 'undefined' && content instanceof HTMLElement) {
     const resizeObserver = new ResizeObserver(() => {
-      syncScaledContentBounds();
+      syncContentBounds();
     });
     resizeObserver.observe(content);
   }
 
   const syncChromeLayout = () => {
-    syncScaledContentBounds();
+    syncContentBounds();
     applyLayoutOffset();
   };
 
@@ -427,5 +519,60 @@ export class HtmlPreviewProvider implements vscode.CustomReadonlyEditorProvider 
     }
 
     return text;
+  }
+
+  private getErrorHtml(documentUri: vscode.Uri, message: string): string {
+    const escapedTitle = this.escapeHtml(path.basename(documentUri.fsPath));
+    const escapedMessage = this.escapeHtml(message);
+
+    return `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline';">
+  <style>
+    body {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 24px;
+      color: var(--vscode-editor-foreground);
+      background: var(--vscode-editor-background);
+      font-family: var(--vscode-font-family), sans-serif;
+    }
+
+    h1 {
+      margin: 0 0 12px;
+      font-size: 18px;
+      font-weight: 600;
+    }
+
+    p {
+      margin: 0;
+      line-height: 1.5;
+    }
+  </style>
+</head>
+<body>
+  <h1>Unable to preview ${escapedTitle}</h1>
+  <p>${escapedMessage}</p>
+</body>
+</html>`;
+  }
+
+  private getErrorMessage(error: unknown): string {
+    if (error instanceof Error && error.message) {
+      return error.message;
+    }
+
+    return String(error);
+  }
+
+  private escapeHtml(value: string): string {
+    return value
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
   }
 }

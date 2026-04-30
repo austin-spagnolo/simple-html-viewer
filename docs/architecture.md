@@ -24,6 +24,7 @@ The extension uses a VS Code readonly custom editor backed by a webview. This av
 - Reads the selected HTML file as text.
 - Rewrites resource-bearing HTML attributes such as `src`, `href`, `srcset`, `poster`, and `data` to `webview.asWebviewUri(...)` values using a tag-aware scanner instead of global string replacement.
 - Injects a preview-specific Content Security Policy that allows local rewritten assets, inline scripts, and remote resources such as Plotly CDN.
+- Gates script execution and remote resource loading behind workspace trust by default, with settings for always-on active content or fully blocked page scripts.
 - Rebuilds the final preview document as a single webview HTML document so interactive content runs in the same DOM as the toolbar and content surface.
 - Applies a narrow saved-page normalization step for stale HTML widget binding classes captured by "Save page as" artifacts.
 
@@ -48,7 +49,7 @@ Planned future enhancement:
 
 - A configurable global default zoom is provided through extension settings.
 - Each open preview maintains its current zoom independently from VS Code application zoom.
-- Zoom is applied inside the webview document by scaling a dedicated preview content wrapper and synchronizing its measured layout box.
+- Zoom is applied inside the webview document with Chromium layout zoom on a dedicated preview content wrapper and synchronized layout bounds.
 - Toolbar actions update the current preview immediately while preserving the page state of interactive content.
 
 ## Tradeoffs

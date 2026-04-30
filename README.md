@@ -35,9 +35,12 @@ Open any `.html` or `.htm` file and use one of these entry points:
 - `simpleHtmlViewer.autoRefresh`: `onSave` or `off`
 - `simpleHtmlViewer.zoomStep`: zoom increment percentage
 - `simpleHtmlViewer.defaultZoom`: starting zoom percentage
+- `simpleHtmlViewer.activeContent`: controls whether previewed HTML can run scripts and load remote resources. The default, `trustedWorkspaces`, allows active content only when the workspace is trusted.
+- `simpleHtmlViewer.allowInsecureContent`: allows `http:` and `ws:` resources in active previews. This is disabled by default.
 
 ## Notes
 
+- HTML previews can execute scripts and contact remote URLs when active content is enabled. Keep the default workspace-trust gate unless you trust the files you are opening.
 - Very wide or fixed-width HTML documents may still require horizontal scrolling at larger zoom levels.
 - The toolbar is injected into the preview document, so extremely aggressive page-level CSS can still affect its presentation.
 - The current zoom model is optimized for Chromium-based VS Code webviews and may render some third-party widgets slightly differently than a standalone browser.
