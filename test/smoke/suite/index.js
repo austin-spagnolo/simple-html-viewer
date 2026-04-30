@@ -113,10 +113,10 @@ async function run() {
       targetUri,
     );
     assert.match(initialRenderedHtml, /Simple HTML Viewer Test Document/);
-    assert.match(initialRenderedHtml, /id="simple-html-viewer-frame"/);
-    assert.match(initialRenderedHtml, /srcdoc="/);
+    assert.match(initialRenderedHtml, /id="simple-html-viewer-content"/);
+    assert.match(initialRenderedHtml, /transform = value === 100/);
+    assert.doesNotMatch(initialRenderedHtml, /srcdoc="/);
     assert.match(initialRenderedHtml, /color-scheme:only light/);
-    assert.match(initialRenderedHtml, /source: 'simple-html-viewer'/);
 
     await vscode.commands.executeCommand(
       'simpleHtmlViewer._test.setZoom',
