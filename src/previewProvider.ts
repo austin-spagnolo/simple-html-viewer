@@ -1,11 +1,7 @@
 import * as path from 'path';
 import { TextDecoder } from 'util';
 import * as vscode from 'vscode';
-import {
-  injectIntoHead,
-  preparePreviewHtml,
-  wrapBodyContent,
-} from './previewTransform';
+import { preparePreviewHtml } from './previewTransform';
 
 type AutoRefreshMode = 'onSave' | 'off';
 type ActiveContentMode = 'trustedWorkspaces' | 'always' | 'off';
@@ -346,6 +342,16 @@ export class HtmlPreviewProvider
     ].join(' ');
   }
 
+  private createShellCsp(webview: vscode.Webview, nonce: string): string {
+    return [
+      `default-src 'none';`,
+      `frame-src 'self' ${webview.cspSource} data: blob:;`,
+      `img-src ${webview.cspSource} data: blob:;`,
+      `style-src ${webview.cspSource} 'unsafe-inline';`,
+      `script-src 'nonce-${nonce}';`,
+    ].join(' ');
+  }
+
   private async prepareHtmlForPreview(
     webview: vscode.Webview,
     documentUri: vscode.Uri,
@@ -353,10 +359,15 @@ export class HtmlPreviewProvider
     nonce: string,
   ): Promise<string> {
     return preparePreviewHtml({
-      cspTag: `<meta http-equiv="Content-Security-Policy" content="${this.createPreviewCsp(
-        webview,
-        nonce,
-      )}">`,
+      cspTag: [
+        `<meta http-equiv="Content-Security-Policy" content="${this.createPreviewCsp(
+          webview,
+          nonce,
+        )}">`,
+        '<meta name="color-scheme" content="light">',
+        '<style>:root{color-scheme:only light;}html,body{color:CanvasText;background-color:Canvas;}</style>',
+        `<script nonce="${nonce}">window.addEventListener('message',(event)=>{if(event.data?.source==='simple-html-viewer'&&event.data?.type==='resize'){window.dispatchEvent(new Event('resize'));}});</script>`,
+      ].join(''),
       documentUrl: documentUri.toString(),
       html,
       rewriteLocalUri: (uri) =>
@@ -381,7 +392,21 @@ export class HtmlPreviewProvider
       sourceHtml,
       nonce,
     );
-    const toolbarPrefix = `
+    const frameSandbox = this.getPreviewSecurityPolicy().activeContentAllowed
+      ? 'allow-downloads allow-forms allow-modals allow-popups allow-scripts'
+      : '';
+
+    return `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy" content="${this.createShellCsp(
+    webview,
+    nonce,
+  )}">
+  <link href="${stylesUri}" rel="stylesheet">
+</head>
+<body>
 <div id="simple-html-viewer-root">
   <div id="simple-html-viewer-toolbar" data-simple-html-viewer-toolbar>
     <button id="simple-html-viewer-zoom-out" class="simple-html-viewer-button" type="button" aria-label="Zoom out">-</button>
@@ -393,29 +418,26 @@ export class HtmlPreviewProvider
     }" type="button">refresh</button>
   </div>
 </div>
-<div id="simple-html-viewer-offset" aria-hidden="true"></div>
 <div id="simple-html-viewer-content-shell">
-  <div id="simple-html-viewer-content">
-`;
-    const toolbarSuffix = `
-  </div>
+  <iframe id="simple-html-viewer-frame" sandbox="${frameSandbox}" srcdoc="${this.escapeHtml(
+    preparedHtml,
+  )}"></iframe>
 </div>
 <script nonce="${nonce}">
   const vscode = acquireVsCodeApi();
   const zoomLabel = document.getElementById('simple-html-viewer-zoom-label');
   const root = document.getElementById('simple-html-viewer-root');
-  const offset = document.getElementById('simple-html-viewer-offset');
   const contentShell = document.getElementById('simple-html-viewer-content-shell');
-  const content = document.getElementById('simple-html-viewer-content');
-  const syncContentBounds = () => {
-    if (!(contentShell instanceof HTMLElement) || !(content instanceof HTMLElement)) {
-      return;
-    }
-
-    contentShell.style.height = String(Math.ceil(content.getBoundingClientRect().height)) + 'px';
+  const frame = document.getElementById('simple-html-viewer-frame');
+  let currentZoomScale = ${zoom} / 100;
+  const dispatchFrameResize = () => {
+    frame?.contentWindow?.postMessage({
+      source: 'simple-html-viewer',
+      type: 'resize',
+    }, '*');
   };
   const applyLayoutOffset = () => {
-    if (!(root instanceof HTMLElement) || !(offset instanceof HTMLElement)) {
+    if (!(root instanceof HTMLElement) || !(contentShell instanceof HTMLElement)) {
       return;
     }
 
@@ -424,32 +446,33 @@ export class HtmlPreviewProvider
       Math.ceil(root.getBoundingClientRect().height) +
       parseFloat(rootStyle.top || '0') +
       8;
-    offset.style.height = String(reservedHeight) + 'px';
-    document.documentElement.style.scrollPaddingTop =
-      String(reservedHeight) + 'px';
+    contentShell.style.top = String(reservedHeight) + 'px';
+  };
+  const applyFrameZoom = () => {
+    if (!(frame instanceof HTMLElement)) {
+      return;
+    }
+
+    frame.style.transform =
+      currentZoomScale === 1 ? '' : 'scale(' + String(currentZoomScale) + ')';
+    frame.style.width =
+      currentZoomScale === 1 ? '100%' : String(100 / currentZoomScale) + '%';
+    frame.style.height =
+      currentZoomScale === 1 ? '100%' : String(100 / currentZoomScale) + '%';
   };
   const notifyResponsiveLayout = () => {
-    const dispatchResize = () => {
-      window.dispatchEvent(new Event('resize'));
-    };
-
     requestAnimationFrame(() => {
-      syncContentBounds();
       applyLayoutOffset();
-      dispatchResize();
+      applyFrameZoom();
+      dispatchFrameResize();
       requestAnimationFrame(() => {
-        syncContentBounds();
-        dispatchResize();
+        applyFrameZoom();
+        dispatchFrameResize();
       });
     });
   };
   const applyZoom = (value) => {
-    if (content instanceof HTMLElement) {
-      const scale = value / 100;
-      content.style.zoom = value === 100 ? '' : String(scale);
-      content.style.removeProperty('width');
-    }
-
+    currentZoomScale = value / 100;
     zoomLabel.textContent = value + '%';
     notifyResponsiveLayout();
   };
@@ -477,18 +500,12 @@ export class HtmlPreviewProvider
     }
   });
 
-  if (typeof ResizeObserver !== 'undefined' && content instanceof HTMLElement) {
-    const resizeObserver = new ResizeObserver(() => {
-      syncContentBounds();
-    });
-    resizeObserver.observe(content);
-  }
-
   const syncChromeLayout = () => {
-    syncContentBounds();
     applyLayoutOffset();
+    applyFrameZoom();
   };
 
+  frame?.addEventListener('load', notifyResponsiveLayout);
   window.addEventListener('load', syncChromeLayout);
   window.addEventListener('resize', syncChromeLayout);
   requestAnimationFrame(syncChromeLayout);
@@ -496,18 +513,8 @@ export class HtmlPreviewProvider
   applyZoom(${zoom});
   vscode.postMessage({ type: 'ready' });
 </script>
-`;
-
-    const wrappedHtml = wrapBodyContent(
-      preparedHtml,
-      toolbarPrefix,
-      toolbarSuffix,
-    );
-
-    return injectIntoHead(
-      wrappedHtml,
-      `<link href="${stylesUri}" rel="stylesheet">`,
-    );
+</body>
+</html>`;
   }
 
   private createNonce(): string {

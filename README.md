@@ -17,7 +17,7 @@ It is built for HTML files that need real browser behavior inside VS Code: embed
 - Zoom toolbar with `-`, current zoom percentage, `+`, and `reset`.
 - Auto-refresh on save by default.
 - Manual refresh mode when auto-refresh is disabled.
-- Rewrites local resource references for VS Code webviews while still allowing remote CDN assets.
+- Renders the preview in an isolated frame, rewriting local resource references for VS Code webviews while still allowing remote CDN assets.
 - Handles responsive widgets that need relayout on zoom changes.
 - Remote-friendly design that does not depend on forwarded localhost ports.
 
@@ -42,7 +42,7 @@ Open any `.html` or `.htm` file and use one of these entry points:
 
 - HTML previews can execute scripts and contact remote URLs when active content is enabled. Keep the default workspace-trust gate unless you trust the files you are opening.
 - Very wide or fixed-width HTML documents may still require horizontal scrolling at larger zoom levels.
-- The toolbar is injected into the preview document, so extremely aggressive page-level CSS can still affect its presentation.
+- The toolbar is rendered outside the preview frame so page-level CSS cannot restyle it.
 - The current zoom model is optimized for Chromium-based VS Code webviews and may render some third-party widgets slightly differently than a standalone browser.
 - Saved web pages still depend on whatever companion assets were captured with them. If a saved page is missing fonts, images, or scripts on disk, the preview cannot recreate those files.
 
