@@ -14,6 +14,8 @@ function rewriteLocalUri(uri) {
 }
 
 function runTest(name, fn) {
+  // Keep these tests dependency-free so they can run after a plain TypeScript
+  // build without bringing in a separate test runner.
   try {
     fn();
     console.log(`ok - ${name}`);

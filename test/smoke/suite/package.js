@@ -56,6 +56,8 @@ async function run() {
   await extension.activate();
 
   if (process.env.SIMPLE_HTML_VIEWER_EXPECT_PACKAGED === '1') {
+    // In VSIX mode the real extension should come from the isolated install
+    // directory, not from the repository workspace we opened for fixtures.
     const workspaceRoot = path.resolve(
       process.env.SIMPLE_HTML_VIEWER_WORKSPACE ?? '',
     );

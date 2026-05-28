@@ -1,4 +1,5 @@
 :root {
+  /* Map VS Code theme tokens to viewer-prefixed variables. */
   --simple-html-viewer-background: var(--vscode-editor-background);
   --simple-html-viewer-border: var(--vscode-panel-border);
   --simple-html-viewer-button-bg: var(--vscode-button-secondaryBackground);
@@ -13,6 +14,7 @@
 }
 
 #simple-html-viewer-root {
+  /* Reset aggressively because this toolbar UI is injected into arbitrary HTML. */
   all: initial;
   position: fixed;
   top: 8px;
@@ -27,6 +29,7 @@
 }
 
 #simple-html-viewer-offset {
+  /* JS updates this spacer so fixed toolbar UI does not cover page content. */
   all: initial;
   display: block;
   width: 100%;
@@ -40,6 +43,7 @@
 }
 
 #simple-html-viewer-content {
+  /* Zoom is applied here so the toolbar itself stays crisp and stationary. */
   display: block;
   transform-origin: top left;
 }

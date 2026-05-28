@@ -26,6 +26,8 @@ export class HtmlPreviewProvider
   implements vscode.CustomReadonlyEditorProvider
 {
   public static readonly viewType = 'simpleHtmlViewer.preview';
+  // A single HTML file can have several preview tabs open, so panel state is
+  // grouped by URI instead of assuming one preview per document.
   private readonly panels = new Map<string, Set<vscode.WebviewPanel>>();
   private readonly renderCounts = new Map<string, number>();
   private readonly lastRenderedHtml = new Map<string, string>();
@@ -50,6 +52,8 @@ export class HtmlPreviewProvider
     document: vscode.CustomDocument,
     webviewPanel: vscode.WebviewPanel,
   ): Promise<void> {
+    // Limit local file access to the opened file's folder and this extension's
+    // own media assets. Remote resources are controlled later by the CSP.
     const resourceRoot = vscode.Uri.joinPath(document.uri, '..');
     const extensionMediaRoot = vscode.Uri.joinPath(
       this.context.extensionUri,
@@ -63,6 +67,8 @@ export class HtmlPreviewProvider
 
     this.registerPanel(document.uri, webviewPanel);
 
+    // The toolbar lives inside the webview, but zoom state is owned here so it
+    // survives refreshes and can be shared with every preview for the same file.
     webviewPanel.webview.onDidReceiveMessage(
       async (message: WebviewMessage) => {
         switch (message.type) {
@@ -173,6 +179,8 @@ export class HtmlPreviewProvider
     documentUri: vscode.Uri,
   ): Promise<void> {
     try {
+      // Render from the saved file each time. That keeps manual refresh and
+      // auto-refresh behavior aligned with what is actually on disk.
       const bytes = await vscode.workspace.fs.readFile(documentUri);
       const sourceHtml = new TextDecoder('utf-8').decode(bytes);
       const zoom = this.getStoredZoom(documentUri);
@@ -276,6 +284,8 @@ export class HtmlPreviewProvider
 
   private getPreviewSecurityPolicy(): PreviewSecurityPolicy {
     const activeContentMode = this.getActiveContentMode();
+    // Running page scripts is a trust boundary, so only allow it when the user
+    // opted in or the workspace is already trusted.
     const activeContentAllowed =
       activeContentMode === 'always' ||
       (activeContentMode === 'trustedWorkspaces' && vscode.workspace.isTrusted);
@@ -290,6 +300,8 @@ export class HtmlPreviewProvider
   private createPreviewCsp(webview: vscode.Webview, nonce: string): string {
     const securityPolicy = this.getPreviewSecurityPolicy();
     const localSource = webview.cspSource;
+    // Keep each CSP directive's source list explicit so changes to one kind of
+    // access do not accidentally widen another.
     const remoteResourceSources = securityPolicy.activeContentAllowed
       ? ['https:', ...(securityPolicy.insecureContentAllowed ? ['http:'] : [])]
       : [];
@@ -352,6 +364,8 @@ export class HtmlPreviewProvider
     html: string,
     nonce: string,
   ): Promise<string> {
+    // Add webview security metadata before rewriting resources, then let the
+    // transform convert relative file references into VS Code webview URIs.
     return preparePreviewHtml({
       cspTag: [
         `<meta http-equiv="Content-Security-Policy" content="${this.createPreviewCsp(
@@ -385,6 +399,8 @@ export class HtmlPreviewProvider
       sourceHtml,
       nonce,
     );
+    // The toolbar is injected into the real document body instead of using an
+    // iframe, which lets page scripts and libraries run in their expected DOM.
     const toolbarPrefix = `
 <div id="simple-html-viewer-root">
   <div id="simple-html-viewer-toolbar" data-simple-html-viewer-toolbar>
@@ -416,6 +432,8 @@ export class HtmlPreviewProvider
       return;
     }
 
+    // CSS transforms do not affect normal document flow, so the shell mirrors
+    // the scaled content height to keep scrolling natural.
     contentShell.style.height = String(Math.ceil(content.getBoundingClientRect().height)) + 'px';
   };
   const applyLayoutOffset = () => {
@@ -423,6 +441,8 @@ export class HtmlPreviewProvider
       return;
     }
 
+    // Reserve space for the fixed toolbar so it does not cover the top of the
+    // page, and make in-page anchor jumps land below it.
     const rootStyle = window.getComputedStyle(root);
     const reservedHeight =
       Math.ceil(root.getBoundingClientRect().height) +
@@ -437,6 +457,8 @@ export class HtmlPreviewProvider
       window.dispatchEvent(new Event('resize'));
     };
 
+    // Many charting libraries listen for resize events, so send them after the
+    // transform has settled instead of immediately after changing the style.
     requestAnimationFrame(() => {
       syncContentBounds();
       applyLayoutOffset();

@@ -4,6 +4,8 @@ import { HtmlPreviewProvider } from './previewProvider';
 export function activate(context: vscode.ExtensionContext): void {
   const provider = new HtmlPreviewProvider(context);
 
+  // Register the provider VS Code calls when an HTML file is opened with this
+  // custom preview.
   context.subscriptions.push(
     vscode.window.registerCustomEditorProvider(
       HtmlPreviewProvider.viewType,
@@ -21,6 +23,8 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand(
       'simpleHtmlViewer.openPreview',
       async (resource?: vscode.Uri) => {
+        // Context menus pass a resource; command-palette launches fall back to
+        // whatever editor the user currently has active.
         const target = resource ?? vscode.window.activeTextEditor?.document.uri;
         if (!target) {
           void vscode.window.showInformationMessage(
@@ -64,6 +68,8 @@ export function activate(context: vscode.ExtensionContext): void {
   );
 
   if (context.extensionMode === vscode.ExtensionMode.Test) {
+    // The smoke tests need a narrow view into preview state without exposing
+    // these helpers to normal extension users.
     context.subscriptions.push(
       vscode.commands.registerCommand(
         'simpleHtmlViewer._test.setZoom',
