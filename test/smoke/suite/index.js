@@ -14,6 +14,8 @@ function delay(ms) {
 async function waitFor(predicate, timeoutMs = 10000) {
   const startedAt = Date.now();
 
+  // VS Code extension-host operations are eventually consistent in tests; poll
+  // for the observable state instead of guessing at one fixed sleep.
   while (Date.now() - startedAt < timeoutMs) {
     const value = await predicate();
     if (value) {
@@ -60,6 +62,8 @@ async function createSmokeFixture() {
     `.smoke-${Date.now()}.html`,
   );
 
+  // Copy the sample HTML before editing it so the checked-in fixture stays clean
+  // even when the smoke test exercises save-triggered refresh.
   const bytes = await vscode.workspace.fs.readFile(sourceUri);
   await vscode.workspace.fs.writeFile(fixtureUri, bytes);
   return fixtureUri;
@@ -78,6 +82,8 @@ async function run() {
       ? availableCommands
       : undefined;
   });
+  // The _test commands are intentionally registered only in extension test mode;
+  // they let this suite inspect preview state without depending on webview internals.
   assert(commands.includes('simpleHtmlViewer.openPreview'));
   assert(commands.includes('simpleHtmlViewer.refreshPreview'));
   assert(commands.includes('simpleHtmlViewer._test.setZoom'));

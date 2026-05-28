@@ -17,6 +17,8 @@ function getPackagedVsixPath(extensionRoot) {
 }
 
 async function main() {
+  // The same smoke suite can run against source during CI or against the
+  // packaged VSIX that would be shipped to users.
   const runPackagedVsix = process.argv.includes('--vsix');
   const extensionRoot = path.resolve(__dirname, '..', '..');
   const packageRunnerPath = path.resolve(__dirname, 'packageRunner');
@@ -40,11 +42,15 @@ async function main() {
     `extensions-${Date.now()}`,
   );
 
+  // Use fresh VS Code state each run so installed extensions and user settings
+  // from a developer machine cannot make the smoke tests pass or fail.
   fs.mkdirSync(isolatedUserDataDir, { recursive: true });
   fs.mkdirSync(isolatedExtensionsDir, { recursive: true });
 
   try {
     if (runPackagedVsix) {
+      // Packaged tests install the VSIX into a tiny host extension so we exercise
+      // the artifact layout, not the checkout on disk.
       await runVSCodeCommand([
         '--install-extension',
         getPackagedVsixPath(extensionRoot),

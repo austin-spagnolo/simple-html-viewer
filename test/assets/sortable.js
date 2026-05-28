@@ -1,4 +1,6 @@
 (() => {
+  // Small active-content fixture used by smoke and manual tests to prove page
+  // scripts still run after the preview wraps the document.
   const table = document.querySelector('[data-sortable-table]');
   if (!table) {
     return;
