@@ -23,6 +23,6 @@
 
 - Push the latest local commits to GitHub.
 - Confirm the Git tag matches `package.json` exactly, such as `v0.0.2` for version `0.0.2`.
-- Confirm the `CI` workflow runs on the default branch.
+- Confirm the `CI` workflow runs on `master`.
 - Use the manual `Release` workflow to create a GitHub Release and attach the packaged `.vsix`.
 - Set `publish` to `true` in the `Release` workflow when you also want to publish to the VS Code Marketplace.
