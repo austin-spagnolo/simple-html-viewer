@@ -21,6 +21,8 @@ export function injectIntoHead(html: string, tag: string): string {
     return html.replace(/<head(\s[^>]*)?>/i, (match) => `${match}${tag}`);
   }
 
+  // Some exported snippets are body fragments rather than full documents. Wrap
+  // those in a minimal page so the preview can still attach CSP and styles.
   return `<!DOCTYPE html><html><head>${tag}</head><body>${html}</body></html>`;
 }
 
@@ -30,6 +32,8 @@ export function wrapBodyContent(
   suffix: string,
 ): string {
   if (/<body(\s[^>]*)?>/i.test(html)) {
+    // Preserve the user's existing body attributes while placing our viewer UI
+    // just inside the document body.
     const withPrefix = html.replace(
       /<body(\s[^>]*)?>/i,
       (match) => `${match}${prefix}`,
@@ -50,6 +54,9 @@ function rewriteHtmlForPreview(
   documentUrl: string,
   rewriteLocalUri: (uri: string) => string,
 ): string {
+  // This is a small tag walker rather than a browser DOM parse. It keeps the
+  // original document shape, skips raw script/style text, and only edits URL-ish
+  // attributes that VS Code needs rewritten.
   const lowerHtml = html.toLowerCase();
   let index = 0;
   let result = '';
@@ -65,6 +72,7 @@ function rewriteHtmlForPreview(
     result += html.slice(index, nextTagStart);
 
     if (lowerHtml.startsWith('<!--', nextTagStart)) {
+      // Comments may contain example markup; leave that text alone.
       const commentEnd = html.indexOf('-->', nextTagStart + 4);
       if (commentEnd === -1) {
         result += html.slice(nextTagStart);
@@ -132,6 +140,8 @@ function rewriteHtmlForPreview(
     index = tagEnd + 1;
 
     if (isRawTextElement(rewrittenTag.tagName) && !rewrittenTag.selfClosing) {
+      // Script and style bodies often contain strings that look like tags. Jump
+      // straight to the closing tag so those strings are not rewritten by mistake.
       const closingTagStart = lowerHtml.indexOf(
         `</${rewrittenTag.tagName}`,
         index,
@@ -177,6 +187,8 @@ function rewriteOpenTagForPreview(
   let rewrittenTag = '<';
   let nextBaseUrl = currentBaseUrl;
 
+  // Walk attributes manually so whitespace, quote style, and uncommon attrs
+  // survive the transform unless they are URLs we intentionally rewrite.
   while (cursor < tagContentEnd && /\s/.test(tagSource[cursor])) {
     rewrittenTag += tagSource[cursor];
     cursor += 1;
@@ -275,6 +287,8 @@ function rewriteOpenTagForPreview(
     }
 
     if (tagName === 'base' && attrName === 'href') {
+      // Later relative URLs resolve against the most recent <base href>, matching
+      // browser behavior closely enough for exported HTML documents.
       nextBaseUrl =
         resolveUrlAgainstBase(currentBaseUrl, attrValue) ?? currentBaseUrl;
     }
@@ -327,6 +341,8 @@ function normalizeAttributeValueForPreview(
     return value;
   }
 
+  // htmlwidgets marks some saved widgets as already bound. Inside a fresh
+  // webview that stale marker can prevent the widget from initializing again.
   const classNames = value.split(/\s+/).filter(Boolean);
   if (
     !classNames.includes('html-widget') ||
@@ -362,6 +378,8 @@ function rewriteSrcsetForPreview(
     return srcset;
   }
 
+  // srcset candidates carry descriptors such as "2x" or "640w"; rewrite only
+  // the URL portion and leave those descriptors exactly where the browser expects.
   return srcset
     .split(',')
     .map((candidate) => {
@@ -423,6 +441,9 @@ function shouldRewriteResourceUrl(value: string): boolean {
     return false;
   }
 
+  // Anchors, protocol-relative URLs, and explicit schemes already have browser
+  // semantics. Paths without a scheme, including root-relative paths, need
+  // conversion to webview-safe URIs.
   return !(
     value.startsWith('#') ||
     value.startsWith('//') ||
@@ -446,6 +467,7 @@ function isRawTextElement(tagName: string): boolean {
 function findTagEnd(html: string, startIndex: number): number {
   let quote: '"' | "'" | undefined;
 
+  // A ">" inside an attribute value is just text, not the end of the tag.
   for (let index = startIndex + 1; index < html.length; index += 1) {
     const character = html[index];
 
