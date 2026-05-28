@@ -1,5 +1,7 @@
 # Release Checklist
 
+Review the branching and release workflow in [release-process.md](./release-process.md) before cutting a release.
+
 ## Metadata
 
 - Review the extension description, keywords, categories, and gallery banner values.
