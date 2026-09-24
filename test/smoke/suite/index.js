@@ -1,4 +1,5 @@
 const assert = require('node:assert/strict');
+const fs = require('node:fs/promises');
 const vscode = require('vscode');
 
 const PREVIEW_VIEW_TYPE = 'simpleHtmlViewer.preview';
@@ -99,6 +100,9 @@ async function run() {
   assert(commands.includes('simpleHtmlViewer._test.getLastRenderedHtml'));
 
   const targetUri = await createSmokeFixture();
+  const refreshConfig = vscode.workspace.getConfiguration('simpleHtmlViewer');
+  const originalRefreshSetting =
+    refreshConfig.inspect('autoRefresh')?.globalValue;
 
   try {
     const document = await vscode.workspace.openTextDocument(targetUri);
@@ -240,9 +244,75 @@ async function run() {
     });
     assert.match(refreshedHtml, /Simple HTML Viewer Test Document Updated/);
 
+    await refreshConfig.update(
+      'autoRefresh',
+      'onFileChange',
+      vscode.ConfigurationTarget.Global,
+    );
+    const externallyUpdatedHtml = refreshedHtml.replace(
+      UPDATED_TITLE,
+      'Externally Regenerated HTML',
+    );
+    await fs.writeFile(targetUri.fsPath, externallyUpdatedHtml);
+    const watchedHtml = await waitFor(async () => {
+      const html = await vscode.commands.executeCommand(
+        'simpleHtmlViewer._test.getLastRenderedHtml',
+        targetUri,
+      );
+      return html && html.includes('Externally Regenerated HTML')
+        ? html
+        : undefined;
+    });
+    const watchedRenderCount = await vscode.commands.executeCommand(
+      'simpleHtmlViewer._test.getRenderCount',
+      targetUri,
+    );
+    assert(watchedRenderCount > refreshedRenderCount);
+    assert.match(watchedHtml, /Externally Regenerated HTML/);
+
+    await refreshConfig.update(
+      'autoRefresh',
+      'off',
+      vscode.ConfigurationTarget.Global,
+    );
+    await fs.writeFile(
+      targetUri.fsPath,
+      externallyUpdatedHtml.replace(
+        'Externally Regenerated HTML',
+        'Manually Refreshed HTML',
+      ),
+    );
+    await delay(600);
+    assert.equal(
+      await vscode.commands.executeCommand(
+        'simpleHtmlViewer._test.getRenderCount',
+        targetUri,
+      ),
+      watchedRenderCount,
+    );
+    await vscode.commands.executeCommand(
+      'simpleHtmlViewer.refreshPreview',
+      targetUri,
+    );
+    const manuallyRefreshedHtml = await waitFor(async () => {
+      const html = await vscode.commands.executeCommand(
+        'simpleHtmlViewer._test.getLastRenderedHtml',
+        targetUri,
+      );
+      return html && html.includes('Manually Refreshed HTML')
+        ? html
+        : undefined;
+    });
+    assert.match(manuallyRefreshedHtml, /Manually Refreshed HTML/);
+
     await vscode.workspace.fs.delete(targetUri);
     await closeAllEditors();
   } finally {
+    await refreshConfig.update(
+      'autoRefresh',
+      originalRefreshSetting,
+      vscode.ConfigurationTarget.Global,
+    );
     await closeAllEditors();
     await vscode.workspace.fs.delete(targetUri).catch(() => undefined);
   }

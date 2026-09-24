@@ -1,4 +1,6 @@
 import * as path from 'path';
+import { platform } from 'os';
+import { clearTimeout, setTimeout } from 'timers';
 import { TextDecoder } from 'util';
 import * as vscode from 'vscode';
 import {
@@ -7,7 +9,7 @@ import {
   wrapBodyContent,
 } from './previewTransform';
 
-type AutoRefreshMode = 'onSave' | 'off';
+type AutoRefreshMode = 'onSave' | 'onFileChange' | 'off';
 type ActiveContentMode = 'trustedWorkspaces' | 'always' | 'off';
 
 interface PreviewSecurityPolicy {
@@ -37,6 +39,14 @@ export class HtmlPreviewProvider
   private readonly renderStates = new Map<
     vscode.WebviewPanel,
     PanelRenderState
+  >();
+  private readonly fileWatchers = new Map<
+    string,
+    {
+      watcher: vscode.FileSystemWatcher;
+      timer: ReturnType<typeof setTimeout> | undefined;
+      scheduleRefresh: () => void;
+    }
   >();
 
   public constructor(private readonly context: vscode.ExtensionContext) {}
@@ -105,11 +115,34 @@ export class HtmlPreviewProvider
       return;
     }
 
-    if (this.getAutoRefreshMode(document.uri) !== 'onSave') {
+    const mode = this.getAutoRefreshMode(document.uri);
+    if (mode === 'onFileChange') {
+      const state = this.fileWatchers.get(this.panelKey(document.uri));
+      if (state) {
+        state.scheduleRefresh();
+      } else {
+        void this.refresh(document.uri);
+      }
+      return;
+    }
+    if (mode !== 'onSave') {
       return;
     }
 
     void this.refresh(document.uri);
+  }
+
+  /** Reconcile open-document watchers after autoRefresh configuration changes. */
+  public handleConfigurationChanged(): void {
+    for (const [key, panels] of this.panels) {
+      const uri = this.panelUris.get(
+        panels.values().next().value as vscode.WebviewPanel,
+      );
+      if (!uri) continue;
+      if (this.getAutoRefreshMode(uri) === 'onFileChange')
+        this.ensureFileWatcher(uri);
+      else this.disposeFileWatcher(key);
+    }
   }
 
   public async refresh(uri: vscode.Uri | undefined): Promise<void> {
@@ -182,6 +215,60 @@ export class HtmlPreviewProvider
     panels.add(panel);
     this.panels.set(key, panels);
     this.panelUris.set(panel, uri);
+    if (this.getAutoRefreshMode(uri) === 'onFileChange')
+      this.ensureFileWatcher(uri);
+  }
+
+  private ensureFileWatcher(uri: vscode.Uri): void {
+    const key = this.panelKey(uri);
+    if (this.fileWatchers.has(key) || !this.panels.has(key)) return;
+    const directory = vscode.Uri.joinPath(uri, '..');
+    const watcher = vscode.workspace.createFileSystemWatcher(
+      new vscode.RelativePattern(directory, '*'),
+    );
+    const state = {
+      watcher,
+      timer: undefined as ReturnType<typeof setTimeout> | undefined,
+      scheduleRefresh: (): void => undefined,
+    };
+    const schedule = () => {
+      if (state.timer) clearTimeout(state.timer);
+      state.timer = setTimeout(() => {
+        state.timer = undefined;
+        if (this.fileWatchers.get(key) === state) void this.refresh(uri);
+      }, 250);
+    };
+    state.scheduleRefresh = schedule;
+    const scheduleIfTarget = (changedUri: vscode.Uri) => {
+      if (this.isWatchedFile(uri, changedUri)) schedule();
+    };
+    watcher.onDidChange(scheduleIfTarget);
+    watcher.onDidCreate(scheduleIfTarget);
+    this.fileWatchers.set(key, state);
+  }
+
+  private isWatchedFile(target: vscode.Uri, changed: vscode.Uri): boolean {
+    if (
+      target.scheme !== changed.scheme ||
+      target.authority !== changed.authority
+    )
+      return false;
+    if (this.panelKey(target) === this.panelKey(changed)) return true;
+    if (
+      target.scheme === 'file' &&
+      (platform() === 'win32' || platform() === 'darwin')
+    ) {
+      return target.fsPath.toLowerCase() === changed.fsPath.toLowerCase();
+    }
+    return false;
+  }
+
+  private disposeFileWatcher(key: string): void {
+    const state = this.fileWatchers.get(key);
+    if (!state) return;
+    if (state.timer) clearTimeout(state.timer);
+    state.watcher.dispose();
+    this.fileWatchers.delete(key);
   }
 
   private unregisterPanel(uri: vscode.Uri, panel: vscode.WebviewPanel): void {
@@ -202,7 +289,9 @@ export class HtmlPreviewProvider
     if (panels.size === 0) {
       this.panels.delete(key);
       this.lastRenderedHtml.delete(key);
-    }
+      this.disposeFileWatcher(key);
+    } else if (this.getAutoRefreshMode(uri) === 'onFileChange')
+      this.ensureFileWatcher(uri);
   }
 
   private async renderDocument(

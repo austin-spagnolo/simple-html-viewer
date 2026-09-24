@@ -71,6 +71,11 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.workspace.onDidSaveTextDocument((document) => {
       provider.handleDocumentSaved(document);
     }),
+    vscode.workspace.onDidChangeConfiguration((event) => {
+      if (event.affectsConfiguration('simpleHtmlViewer.autoRefresh')) {
+        provider.handleConfigurationChanged();
+      }
+    }),
   );
 
   if (context.extensionMode === vscode.ExtensionMode.Test) {

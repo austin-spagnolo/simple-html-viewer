@@ -98,10 +98,11 @@
           "type": "string",
           "enum": [
             "onSave",
+            "onFileChange",
             "off"
           ],
           "default": "onSave",
-          "markdownDescription": "Controls automatic refresh for webview previews. Set to `off` to refresh manually with the editor title command. Integrated Browser tabs use VS Code's own reload setting."
+          "markdownDescription": "Controls automatic refresh for webview previews. `onSave` refreshes when the HTML file is saved in VS Code. `onFileChange` also watches an open preview's HTML file for external rewrites. `off` disables automatic refresh. Refresh Preview in the editor title is always available. Integrated Browser tabs use VS Code's own reload setting."
         },
         "simpleHtmlViewer.zoomStep": {
           "type": "number",
