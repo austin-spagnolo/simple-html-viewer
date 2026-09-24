@@ -9,16 +9,16 @@ It works with local files and files in Remote-SSH, Dev Containers, and Codespace
 1. Open an `.html` or `.htm` file in VS Code.
 2. Click the **Open Preview** icon in the editor title, or run **Simple HTML Viewer: Open Preview** from the Command Palette.
 
-You can also right-click an HTML file in Explorer and choose **Open Preview**. The preview opens beside your file and updates when you save the HTML. Run **Open Preview** again for the same file to return to its preview tab.
+You can also right-click an HTML file in Explorer and choose **Open Preview**. The preview opens beside your file and refreshes when you save the HTML in VS Code.
 
 ## What it handles
 
 - **Remote files, directly.** Preview HTML stored in a remote workspace without copying it locally or running a server.
 - **Interactive output.** View generated reports with JavaScript, including Plotly charts and other widgets, in a trusted workspace.
 - **Companion assets.** Load relative CSS, JavaScript, images, and fonts from the HTML file's folder and its subfolders.
-- **A simple editing loop.** Save the HTML to refresh the webview preview, or use **Refresh Preview** in the editor title. Zoom the preview independently of the rest of VS Code.
+- **A simple editing loop.** Save the HTML in VS Code to refresh the webview preview, or use **Refresh Preview** in the editor title. Zoom the preview independently of the rest of VS Code.
 
-Refresh on save responds to saves of the HTML file in VS Code. If another tool regenerates the file, use **Refresh Preview**.
+Automatic refresh only responds when the HTML file is saved in VS Code. Changes written by another program are not watched; click **Refresh Preview** to load them.
 
 ## Preview controls
 
