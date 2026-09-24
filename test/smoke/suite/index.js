@@ -33,7 +33,11 @@ function getAllTabs() {
 }
 
 function findPreviewTab() {
-  return getAllTabs().find((tab) => {
+  return getPreviewTabs()[0];
+}
+
+function getPreviewTabs() {
+  return getAllTabs().filter((tab) => {
     const input = tab.input;
     return (
       input &&
@@ -86,6 +90,9 @@ async function run() {
   // they let this suite inspect preview state without depending on webview internals.
   assert(commands.includes('simpleHtmlViewer.openPreview'));
   assert(commands.includes('simpleHtmlViewer.refreshPreview'));
+  assert(commands.includes('simpleHtmlViewer.zoomIn'));
+  assert(commands.includes('simpleHtmlViewer.zoomOut'));
+  assert(commands.includes('simpleHtmlViewer.resetZoom'));
   assert(commands.includes('simpleHtmlViewer._test.setZoom'));
   assert(commands.includes('simpleHtmlViewer._test.getZoom'));
   assert(commands.includes('simpleHtmlViewer._test.getRenderCount'));
@@ -106,6 +113,11 @@ async function run() {
     assert.equal(previewTab.input.viewType, PREVIEW_VIEW_TYPE);
     assert.match(previewTab.label, /\.smoke-.*\.html/i);
 
+    const previewGroupCount = vscode.window.tabGroups.all.length;
+    await vscode.commands.executeCommand('simpleHtmlViewer.openPreview');
+    assert.equal(getPreviewTabs().length, 1);
+    assert.equal(vscode.window.tabGroups.all.length, previewGroupCount);
+
     const initialRenderCount = await waitFor(async () => {
       const count = await vscode.commands.executeCommand(
         'simpleHtmlViewer._test.getRenderCount',
@@ -120,9 +132,28 @@ async function run() {
     );
     assert.match(initialRenderedHtml, /Simple HTML Viewer Test Document/);
     assert.match(initialRenderedHtml, /id="simple-html-viewer-content"/);
+    assert.doesNotMatch(initialRenderedHtml, /simple-html-viewer-toolbar/);
     assert.match(initialRenderedHtml, /transform = value === 100/);
     assert.doesNotMatch(initialRenderedHtml, /srcdoc="/);
     assert.match(initialRenderedHtml, /color-scheme:only light/);
+
+    await vscode.commands.executeCommand('simpleHtmlViewer.zoomIn');
+    assert.equal(
+      await vscode.commands.executeCommand(
+        'simpleHtmlViewer._test.getZoom',
+        targetUri,
+      ),
+      110,
+    );
+    await vscode.commands.executeCommand('simpleHtmlViewer.zoomOut');
+    await vscode.commands.executeCommand('simpleHtmlViewer.resetZoom');
+    assert.equal(
+      await vscode.commands.executeCommand(
+        'simpleHtmlViewer._test.getZoom',
+        targetUri,
+      ),
+      100,
+    );
 
     await vscode.commands.executeCommand(
       'simpleHtmlViewer._test.setZoom',
@@ -137,7 +168,26 @@ async function run() {
       140,
     );
 
+    const sourceUri = vscode.Uri.joinPath(
+      vscode.workspace.workspaceFolders[0].uri,
+      'test',
+      'user-test.html',
+    );
+    await vscode.commands.executeCommand(
+      'simpleHtmlViewer.openPreview',
+      sourceUri,
+    );
+    assert.equal(getPreviewTabs().length, 2);
+    assert.equal(vscode.window.tabGroups.all.length, previewGroupCount);
+
     await closeAllEditors();
+    assert.equal(
+      await vscode.commands.executeCommand(
+        'simpleHtmlViewer._test.getLastRenderedHtml',
+        targetUri,
+      ),
+      undefined,
+    );
 
     const reopenedDocument = await vscode.workspace.openTextDocument(targetUri);
     await vscode.window.showTextDocument(reopenedDocument);
@@ -153,11 +203,9 @@ async function run() {
         'simpleHtmlViewer._test.getLastRenderedHtml',
         targetUri,
       );
-      return html && html.includes('simple-html-viewer-zoom-label">140%')
-        ? html
-        : undefined;
+      return html && html.includes('applyZoom(140)') ? html : undefined;
     });
-    assert.match(zoomRenderedHtml, /simple-html-viewer-zoom-label">140%/);
+    assert.match(zoomRenderedHtml, /applyZoom\(140\)/);
 
     const editor = await vscode.window.showTextDocument(reopenedDocument);
     await editor.edit((editBuilder) => {
