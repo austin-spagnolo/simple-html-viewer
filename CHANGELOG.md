@@ -5,6 +5,8 @@
 - Added optional Integrated Browser routing for eligible local HTML, while keeping the remote-capable webview as the default.
 - Reused existing preview tabs and groups instead of opening another editor split on every Preview command.
 - Moved zoom and refresh controls into VS Code's editor UI so they cannot cover page content; addresses [issue #1](https://github.com/austin-spagnolo/simple-html-viewer/issues/1).
+- Added preview-only zoom shortcuts and clearer icons for the editor action and Marketplace listing.
+- Clarified the custom editor name in the Open With menu.
 - Coalesced overlapping webview refresh requests and prevented stale or disposed renders from replacing the latest page.
 - Updated documentation around local and remote rendering and backend-specific controls.
 
