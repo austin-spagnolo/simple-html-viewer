@@ -1,50 +1,43 @@
 # Simple HTML Viewer
 
-Simple HTML Viewer is a VS Code extension for rendering interactive HTML documents directly inside the editor without relying on a localhost preview server.
+Preview `.html` and `.htm` files in VS Code, including files in Remote-SSH, Dev Containers, and Codespaces. Remote previews read the file through VS Code and load companion assets through webview resource URIs. They do not need a web server, port forward, or tunnel.
 
-It is built for HTML files that need real browser behavior inside VS Code: embedded JavaScript, third-party widgets, saved web pages, and local asset folders.
+For local files, you can also send the preview to VS Code's Integrated Browser. The extension defaults to its webview so existing content controls and preview behavior stay in place.
 
-## Why Simple HTML Viewer?
+## Open a preview
 
-- Preview HTML inside VS Code without spinning up a local web server.
-- Render interactive content such as Plotly charts, sortable tables, and embedded JavaScript.
-- Control preview zoom independently from VS Code application zoom.
-- Use the same preview workflow in local workspaces and Remote-SSH sessions.
+Run **Simple HTML Viewer: Open Preview** from the Command Palette, editor title, or Explorer context menu. The command uses the renderer selected by `simpleHtmlViewer.viewer`:
 
-## Features
+| Setting             | Behavior                                                                                                                                       |
+| ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `webview` (default) | Opens local and remote files in this extension's custom editor.                                                                                |
+| `integratedBrowser` | Opens eligible local files in VS Code's Integrated Browser. Remote, unsupported, or unavailable cases explain the fallback to the webview.     |
+| `auto`              | Selects the Integrated Browser for a trusted local workspace file on VS Code 1.133+ unless active content is off. Other files use the webview. |
 
-- Open previews from the command palette, editor title, explorer context menu, or `Open With...`.
-- Zoom toolbar with `-`, current zoom percentage, `+`, and `reset`.
-- Auto-refresh on save by default.
-- Manual refresh mode when auto-refresh is disabled.
-- Rewrites local resource references for VS Code webviews while still allowing remote CDN assets.
-- Handles responsive widgets that need relayout on zoom changes.
-- Remote-friendly design that does not depend on forwarded localhost ports.
+**Open With… → Simple HTML Viewer** always opens the custom webview directly. The routing setting applies to the **Open Preview** command.
 
-## Usage
+Repeated previews reuse the existing preview tab or group instead of creating another split each time.
 
-Open any `.html` or `.htm` file and use one of these entry points:
+## Webview features
 
-- `Simple HTML Viewer: Open Preview` from the command palette
-- Explorer context menu
-- Editor title action
-- `Open With...`
+- Open remote HTML files directly, with local CSS, scripts, images, and other companion assets.
+- Render interactive generated output such as Plotly charts and sortable tables.
+- Refresh on save, or turn that off and use **Refresh Preview** in the editor title.
+- Use **Zoom In**, **Zoom Out**, and **Reset Zoom** from VS Code's editor controls. These controls do not cover the HTML document.
+- Keep zoom independent of VS Code's application zoom.
+
+The Integrated Browser has its own navigation, DevTools, reload, and zoom controls. This extension's refresh, zoom, and content settings apply to **webview previews only**. For native browser tabs, use VS Code's `workbench.browser.autoReloadOnFileChange` and `workbench.browser.pageZoom` settings.
 
 ## Settings
 
-- `simpleHtmlViewer.autoRefresh`: `onSave` or `off`
-- `simpleHtmlViewer.zoomStep`: zoom increment percentage
-- `simpleHtmlViewer.defaultZoom`: starting zoom percentage
-- `simpleHtmlViewer.activeContent`: controls whether previewed HTML can run scripts and load remote resources. The default, `trustedWorkspaces`, allows active content only when the workspace is trusted.
-- `simpleHtmlViewer.allowInsecureContent`: allows `http:` and `ws:` resources in active previews. This is disabled by default.
+- `simpleHtmlViewer.viewer`: `webview`, `integratedBrowser`, or `auto`.
+- `simpleHtmlViewer.autoRefresh`: `onSave` or `off` for webview previews.
+- `simpleHtmlViewer.zoomStep`: webview zoom increment in percent.
+- `simpleHtmlViewer.defaultZoom`: starting webview zoom percentage.
+- `simpleHtmlViewer.activeContent`: controls scripts and remote resources in webview previews. The default, `trustedWorkspaces`, permits them only in trusted workspaces.
+- `simpleHtmlViewer.allowInsecureContent`: permits `http:` and `ws:` resources in active webview previews. Disabled by default.
 
-## Notes
-
-- HTML previews can execute scripts and contact remote URLs when active content is enabled. Keep the default workspace-trust gate unless you trust the files you are opening.
-- Very wide or fixed-width HTML documents may still require horizontal scrolling at larger zoom levels.
-- The toolbar is injected into the preview document, so extremely aggressive page-level CSS can still affect its presentation.
-- The current zoom model is optimized for Chromium-based VS Code webviews and may render some third-party widgets slightly differently than a standalone browser.
-- Saved web pages still depend on whatever companion assets were captured with them. If a saved page is missing fonts, images, or scripts on disk, the preview cannot recreate those files.
+Choosing `integratedBrowser` explicitly delegates content handling to VS Code; the extension's webview Content Security Policy does not apply there. Saved pages still need their companion asset files. Large or fixed-width HTML documents may require horizontal scrolling at higher zoom levels.
 
 ## Development
 
@@ -53,7 +46,7 @@ npm install
 npm run check
 npm run test
 npm run test:smoke
-npm run package:vsix
+npm run test:smoke:vsix
 ```
 
 Press `F5` in VS Code to launch an Extension Development Host.

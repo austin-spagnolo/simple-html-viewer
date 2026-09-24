@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.0
+
+- Added optional Integrated Browser routing for eligible local HTML, while keeping the remote-capable webview as the default.
+- Reused existing preview tabs and groups instead of opening another editor split on every Preview command.
+- Moved zoom and refresh controls into VS Code's editor UI so they cannot cover page content; addresses [issue #1](https://github.com/austin-spagnolo/simple-html-viewer/issues/1).
+- Coalesced overlapping webview refresh requests and prevented stale or disposed renders from replacing the latest page.
+- Updated documentation around local and remote rendering and backend-specific controls.
+
 ## 0.0.3
 
 - Fixed dark-theme color leakage into light-themed HTML tables.
