@@ -18,7 +18,7 @@ You can also right-click an HTML file in Explorer and choose **Open Preview**. T
 - **Companion assets.** Load relative CSS, JavaScript, images, and fonts from the HTML file's folder and its subfolders.
 - **A simple editing loop.** Save the HTML in VS Code to refresh the webview preview, or use **Refresh Preview** in the editor title. Zoom the preview independently of the rest of VS Code.
 
-Automatic refresh only responds when the HTML file is saved in VS Code. Changes written by another program are not watched; click **Refresh Preview** to load them.
+By default, automatic refresh responds to saves in VS Code. If a program regenerates the HTML file, set `simpleHtmlViewer.autoRefresh` to `onFileChange` to watch it while the preview is open. **Refresh Preview** always works, regardless of the setting.
 
 ## Preview controls
 
@@ -30,7 +30,7 @@ With a webview preview active, use its editor-title buttons or these shortcuts:
 | Zoom out   | `Ctrl+-`        | `Cmd+-` |
 | Reset zoom | `Ctrl+0`        | `Cmd+0` |
 
-**Refresh Preview** is available in the editor title. You can turn off refresh on save with `simpleHtmlViewer.autoRefresh` if you prefer to refresh manually.
+**Refresh Preview** is always available in the editor title. Set `simpleHtmlViewer.autoRefresh` to `off` if you prefer to refresh only when you choose.
 
 ## Choose a renderer
 
@@ -46,14 +46,14 @@ The Integrated Browser has its own reload, zoom, navigation, and DevTools contro
 
 ## Settings
 
-| Setting                                 | Default             | Purpose                                                         |
-| --------------------------------------- | ------------------- | --------------------------------------------------------------- |
-| `simpleHtmlViewer.viewer`               | `webview`           | Select the renderer used by **Open Preview**.                   |
-| `simpleHtmlViewer.autoRefresh`          | `onSave`            | Refresh the webview when the HTML file is saved in VS Code.     |
-| `simpleHtmlViewer.zoomStep`             | `10`                | Set the webview zoom increment, in percent.                     |
-| `simpleHtmlViewer.defaultZoom`          | `100`               | Set the starting webview zoom percentage.                       |
-| `simpleHtmlViewer.activeContent`        | `trustedWorkspaces` | Allow page scripts and remote resources in trusted workspaces.  |
-| `simpleHtmlViewer.allowInsecureContent` | `false`             | Allow `http:` and `ws:` resources in an active webview preview. |
+| Setting                                 | Default             | Purpose                                                                            |
+| --------------------------------------- | ------------------- | ---------------------------------------------------------------------------------- |
+| `simpleHtmlViewer.viewer`               | `webview`           | Select the renderer used by **Open Preview**.                                      |
+| `simpleHtmlViewer.autoRefresh`          | `onSave`            | Choose VS Code saves, file watching for external rewrites, or manual-only refresh. |
+| `simpleHtmlViewer.zoomStep`             | `10`                | Set the webview zoom increment, in percent.                                        |
+| `simpleHtmlViewer.defaultZoom`          | `100`               | Set the starting webview zoom percentage.                                          |
+| `simpleHtmlViewer.activeContent`        | `trustedWorkspaces` | Allow page scripts and remote resources in trusted workspaces.                     |
+| `simpleHtmlViewer.allowInsecureContent` | `false`             | Allow `http:` and `ws:` resources in an active webview preview.                    |
 
 Interactive content follows the workspace trust setting by default. The Integrated Browser follows VS Code's own content, reload, and zoom settings.
 

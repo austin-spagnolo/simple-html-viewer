@@ -8,6 +8,7 @@
 - Added preview-only zoom shortcuts and clearer icons for the editor action and Marketplace listing.
 - Clarified the custom editor name in the Open With menu.
 - Coalesced overlapping webview refresh requests and prevented stale or disposed renders from replacing the latest page.
+- Added opt-in file watching so an open preview can refresh when another program rewrites its HTML file; save-only refresh remains the default.
 - Updated documentation around local and remote rendering and backend-specific controls.
 
 ## 0.0.3

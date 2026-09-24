@@ -17,7 +17,7 @@ The native browser command is isolated in the router because it is a workbench c
 
 ## Refresh and zoom
 
-Webview previews refresh on save by default, or through **Refresh Preview** when auto-refresh is off. Refresh rereads the backing file and replaces the webview document. Concurrent refresh requests for a panel are coalesced; only the latest pending result is applied.
+Webview previews refresh on saves in VS Code by default. The optional `onFileChange` mode watches the HTML file while a preview is open, including changes written by external programs. A nonrecursive watcher follows each open file and is disposed when its last preview closes. **Refresh Preview** remains available in every mode. Refresh rereads the backing file and replaces the webview document. Concurrent refresh requests for a panel are coalesced; only the latest pending result is applied.
 
 Each file keeps its webview zoom in workspace state; zoom messages update open previews without reloading page state. Integrated Browser tabs follow VS Code's own reload and page zoom settings. The extension does not control their browser lifecycle.
 

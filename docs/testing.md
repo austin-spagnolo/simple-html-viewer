@@ -45,6 +45,8 @@
 - Edit the page heading, save, and verify the preview updates automatically.
 - Set `simpleHtmlViewer.autoRefresh` to `off`.
 - Edit the page heading again, save, and verify the preview does not change until **Refresh Preview** is run from the editor title.
+- Set `simpleHtmlViewer.autoRefresh` to `onFileChange`, then rewrite the open HTML file with a separate program. Confirm the preview shows the latest version without a VS Code save. Repeat with a program that writes a temporary file and replaces the HTML file.
+- Close the preview and confirm further external writes do not recreate it. Switch between `onSave`, `onFileChange`, and `off` while a preview is open and confirm each mode takes effect immediately. Confirm **Refresh Preview** works in all three modes.
 - Save several rapid revisions while a larger file is refreshing. Verify the final revision appears and that closing the preview during a refresh does not produce an error.
 
 ## Zoom
@@ -59,6 +61,7 @@
 ## Remote
 
 - Repeat the core checks in a Remote-SSH workspace.
+- With `onFileChange`, regenerate the HTML on the remote machine and confirm the open preview updates. Record the remote environment and generator.
 - Verify local CSS, local JS, and external CDN resources still load as expected.
 - Check a generated artifact with companion assets and a larger self-contained artifact. Record file size, read/refresh time, and whether the document becomes interactive.
 - When available, sample Plotly, Bokeh, Vega, MathJax, DataTables, and Jupyter exports. Record which formats were actually exercised rather than treating the list as automatic coverage.
