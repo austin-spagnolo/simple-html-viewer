@@ -13,6 +13,7 @@
 - With `viewer=auto`, check a trusted local file on VS Code 1.133+ while `activeContent` is enabled. Then set `activeContent=off` and confirm the webview is selected. Changing `allowInsecureContent` should not change renderer selection.
 - Check an untrusted workspace, a loose file outside the workspace, and an older VS Code version: these should remain on the webview path.
 - Open a file through `Open With...` and confirm it always uses the webview.
+- Confirm the Open With entry shows the extension name once, without repeating it.
 
 ## Baseline
 
@@ -50,6 +51,7 @@
 
 - Verify the editor title **Zoom In** and **Zoom Out** actions change webview zoom.
 - Verify **Reset Zoom** returns to the configured default zoom.
+- With a webview preview active, verify `Ctrl+=`, `Ctrl+-`, and `Ctrl+0` (or the macOS `Cmd` equivalents) zoom in, zoom out, and reset. Confirm the keys retain their usual VS Code behavior outside a preview.
 - Verify zoom changes do not affect VS Code application zoom.
 - Verify no viewer toolbar is inserted into or covers the HTML document.
 - Verify a document-level floating or sticky table of contents remains anchored while scrolling at zoom levels above 100%.

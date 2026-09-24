@@ -50,9 +50,12 @@
     "commands": [
       {
         "command": "simpleHtmlViewer.openPreview",
-        "title": "Simple HTML Viewer: Open Preview",
+        "title": "Open Preview",
         "category": "Simple HTML Viewer",
-        "icon": "$(browser)"
+        "icon": {
+          "light": "media/open-preview-light.svg",
+          "dark": "media/open-preview-dark.svg"
+        }
       },
       {
         "command": "simpleHtmlViewer.refreshPreview",
@@ -167,10 +170,30 @@
         }
       ]
     },
+    "keybindings": [
+      {
+        "command": "simpleHtmlViewer.zoomIn",
+        "key": "ctrl+=",
+        "mac": "cmd+=",
+        "when": "activeCustomEditorId == simpleHtmlViewer.preview && editorAreaFocus"
+      },
+      {
+        "command": "simpleHtmlViewer.zoomOut",
+        "key": "ctrl+-",
+        "mac": "cmd+-",
+        "when": "activeCustomEditorId == simpleHtmlViewer.preview && editorAreaFocus"
+      },
+      {
+        "command": "simpleHtmlViewer.resetZoom",
+        "key": "ctrl+0",
+        "mac": "cmd+0",
+        "when": "activeCustomEditorId == simpleHtmlViewer.preview && editorAreaFocus"
+      }
+    ],
     "customEditors": [
       {
         "viewType": "simpleHtmlViewer.preview",
-        "displayName": "Simple HTML Viewer",
+        "displayName": "HTML Preview",
         "selector": [
           {
             "filenamePattern": "*.html"

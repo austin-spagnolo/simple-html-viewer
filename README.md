@@ -14,7 +14,7 @@ Run **Simple HTML Viewer: Open Preview** from the Command Palette, editor title,
 | `integratedBrowser` | Opens eligible local files in VS Code's Integrated Browser. Remote, unsupported, or unavailable cases explain the fallback to the webview.     |
 | `auto`              | Selects the Integrated Browser for a trusted local workspace file on VS Code 1.133+ unless active content is off. Other files use the webview. |
 
-**Open With… → Simple HTML Viewer** always opens the custom webview directly. The routing setting applies to the **Open Preview** command.
+The **Open With…** entry for Simple HTML Viewer always opens the custom webview directly. The routing setting applies to the **Open Preview** command.
 
 Repeated previews reuse the existing preview tab or group instead of creating another split each time.
 
@@ -24,6 +24,7 @@ Repeated previews reuse the existing preview tab or group instead of creating an
 - Render interactive generated output such as Plotly charts and sortable tables.
 - Refresh on save, or turn that off and use **Refresh Preview** in the editor title.
 - Use **Zoom In**, **Zoom Out**, and **Reset Zoom** from VS Code's editor controls. These controls do not cover the HTML document.
+- With the webview active, use `Ctrl+=`, `Ctrl+-`, and `Ctrl+0` to zoom in, zoom out, and reset on Windows/Linux (`Cmd` instead of `Ctrl` on macOS).
 - Keep zoom independent of VS Code's application zoom.
 
 The Integrated Browser has its own navigation, DevTools, reload, and zoom controls. This extension's refresh, zoom, and content settings apply to **webview previews only**. For native browser tabs, use VS Code's `workbench.browser.autoReloadOnFileChange` and `workbench.browser.pageZoom` settings.
