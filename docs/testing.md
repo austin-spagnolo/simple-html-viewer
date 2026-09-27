@@ -6,6 +6,15 @@
 - Run `npm run test:smoke` for extension-host smoke coverage of command registration and opening the custom preview editor.
 - Run `npm run test:smoke:vsix` to package the extension, install the VSIX into an isolated test profile, and verify the installed artifact activates.
 
+## Renderer selection
+
+- With `simpleHtmlViewer.viewer=webview`, open the same file twice and confirm one custom preview tab is reused. Open another HTML file and confirm its preview uses the existing side group.
+- With `viewer=integratedBrowser`, open a trusted local workspace HTML file and confirm it opens in VS Code's browser. Open a Remote-SSH file and confirm the extension explains the webview fallback.
+- With `viewer=auto`, check a trusted local file on VS Code 1.133+ while `activeContent` is enabled. Then set `activeContent=off` and confirm the webview is selected. Changing `allowInsecureContent` should not change renderer selection.
+- Check an untrusted workspace, a loose file outside the workspace, and an older VS Code version: these should remain on the webview path.
+- Open a file through `Open With...` and confirm it always uses the webview.
+- Confirm the Open With entry shows the extension name once, without repeating it.
+
 ## Baseline
 
 - Launch the extension with `F5`.
@@ -17,6 +26,7 @@
 - Open preview from the editor title.
 - Open preview from the explorer context menu.
 - Open preview through `Open With...`.
+- Repeat the Preview command on the same file and a second file; verify editor groups do not keep multiplying.
 
 ## Interactive Content
 
@@ -34,18 +44,24 @@
 - Set `simpleHtmlViewer.autoRefresh` to `onSave`.
 - Edit the page heading, save, and verify the preview updates automatically.
 - Set `simpleHtmlViewer.autoRefresh` to `off`.
-- Edit the page heading again, save, and verify the preview does not change until `refresh` is clicked.
+- Edit the page heading again, save, and verify the preview does not change until **Refresh Preview** is run from the editor title.
+- Set `simpleHtmlViewer.autoRefresh` to `onFileChange`, then rewrite the open HTML file with a separate program. Confirm the preview shows the latest version without a VS Code save. Repeat with a program that writes a temporary file and replaces the HTML file.
+- Close the preview and confirm further external writes do not recreate it. Switch between `onSave`, `onFileChange`, and `off` while a preview is open and confirm each mode takes effect immediately. Confirm **Refresh Preview** works in all three modes.
+- Save several rapid revisions while a larger file is refreshing. Verify the final revision appears and that closing the preview during a refresh does not produce an error.
 
 ## Zoom
 
-- Verify `+` increases zoom.
-- Verify `-` decreases zoom.
-- Verify `reset` returns to the configured default zoom.
+- Verify the editor title **Zoom In** and **Zoom Out** actions change webview zoom.
+- Verify **Reset Zoom** returns to the configured default zoom.
+- With a webview preview active, verify `Ctrl+=`, `Ctrl+-`, and `Ctrl+0` (or the macOS `Cmd` equivalents) zoom in, zoom out, and reset. Confirm the keys retain their usual VS Code behavior outside a preview.
 - Verify zoom changes do not affect VS Code application zoom.
-- Verify the toolbar does not cover the top of the document and the reserved gap remains visually stable as zoom changes.
+- Verify no viewer toolbar is inserted into or covers the HTML document.
 - Verify a document-level floating or sticky table of contents remains anchored while scrolling at zoom levels above 100%.
 
 ## Remote
 
 - Repeat the core checks in a Remote-SSH workspace.
+- With `onFileChange`, regenerate the HTML on the remote machine and confirm the open preview updates. Record the remote environment and generator.
 - Verify local CSS, local JS, and external CDN resources still load as expected.
+- Check a generated artifact with companion assets and a larger self-contained artifact. Record file size, read/refresh time, and whether the document becomes interactive.
+- When available, sample Plotly, Bokeh, Vega, MathJax, DataTables, and Jupyter exports. Record which formats were actually exercised rather than treating the list as automatic coverage.

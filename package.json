@@ -1,8 +1,8 @@
 {
   "name": "simple-html-viewer",
   "displayName": "Simple HTML Viewer",
-  "description": "A minimal VS Code HTML viewer with interactive webview rendering and independent zoom controls.",
-  "version": "0.0.3",
+  "description": "Preview local and remote HTML in VS Code without a server, with optional Integrated Browser routing for local files.",
+  "version": "0.1.0",
   "publisher": "austin-spagnolo",
   "preview": true,
   "license": "SEE LICENSE IN LICENSE",
@@ -25,6 +25,8 @@
     "html",
     "preview",
     "webview",
+    "remote-ssh",
+    "generated-html",
     "plotly",
     "javascript"
   ],
@@ -48,41 +50,73 @@
     "commands": [
       {
         "command": "simpleHtmlViewer.openPreview",
-        "title": "Simple HTML Viewer: Open Preview",
+        "title": "Open Preview",
         "category": "Simple HTML Viewer",
-        "icon": "$(browser)"
+        "icon": {
+          "light": "media/open-preview-light.svg",
+          "dark": "media/open-preview-dark.svg"
+        }
       },
       {
         "command": "simpleHtmlViewer.refreshPreview",
-        "title": "Simple HTML Viewer: Refresh Preview",
+        "title": "Refresh Preview",
+        "category": "Simple HTML Viewer",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "simpleHtmlViewer.zoomIn",
+        "title": "Zoom In",
+        "category": "Simple HTML Viewer",
+        "icon": "$(zoom-in)"
+      },
+      {
+        "command": "simpleHtmlViewer.zoomOut",
+        "title": "Zoom Out",
+        "category": "Simple HTML Viewer",
+        "icon": "$(zoom-out)"
+      },
+      {
+        "command": "simpleHtmlViewer.resetZoom",
+        "title": "Reset Zoom",
         "category": "Simple HTML Viewer"
       }
     ],
     "configuration": {
       "title": "Simple HTML Viewer",
       "properties": {
+        "simpleHtmlViewer.viewer": {
+          "type": "string",
+          "enum": [
+            "webview",
+            "auto",
+            "integratedBrowser"
+          ],
+          "default": "webview",
+          "markdownDescription": "Renderer used by Open Preview. `webview` supports local and remote HTML with this extension's controls. `auto` uses Integrated Browser for trusted local workspace files on VS Code 1.133+ unless active content is off; otherwise it uses the webview. `integratedBrowser` explicitly delegates eligible local files on VS Code 1.118.1+ to VS Code, whose security, refresh, and zoom controls replace this extension's settings; unavailable or unsupported cases fall back to the webview. Open With always uses the webview."
+        },
         "simpleHtmlViewer.autoRefresh": {
           "type": "string",
           "enum": [
             "onSave",
+            "onFileChange",
             "off"
           ],
           "default": "onSave",
-          "markdownDescription": "Controls when the HTML preview refreshes automatically. When set to `off`, the preview shows a toolbar refresh button."
+          "markdownDescription": "Controls automatic refresh for webview previews. `onSave` refreshes when the HTML file is saved in VS Code. `onFileChange` also watches an open preview's HTML file for external rewrites. `off` disables automatic refresh. Refresh Preview in the editor title is always available. Integrated Browser tabs use VS Code's own reload setting."
         },
         "simpleHtmlViewer.zoomStep": {
           "type": "number",
           "default": 10,
           "minimum": 1,
           "maximum": 50,
-          "description": "Zoom increment, in percent, used by the preview toolbar."
+          "description": "Zoom increment, in percent, for webview preview commands."
         },
         "simpleHtmlViewer.defaultZoom": {
           "type": "number",
           "default": 100,
           "minimum": 10,
           "maximum": 500,
-          "description": "Default zoom percentage for new previews."
+          "description": "Default zoom percentage for new webview previews."
         },
         "simpleHtmlViewer.activeContent": {
           "type": "string",
@@ -92,12 +126,12 @@
             "off"
           ],
           "default": "trustedWorkspaces",
-          "markdownDescription": "Controls whether previewed HTML can run scripts and load remote resources. `trustedWorkspaces` allows active content only when the workspace is trusted, `always` allows it in every workspace, and `off` blocks page scripts while keeping the preview toolbar active."
+          "markdownDescription": "Controls whether webview previews can run page scripts and load remote resources. `trustedWorkspaces` permits active content only in trusted workspaces; `always` permits it everywhere; `off` blocks page scripts. Explicit Integrated Browser selection follows VS Code's own policy."
         },
         "simpleHtmlViewer.allowInsecureContent": {
           "type": "boolean",
           "default": false,
-          "markdownDescription": "Allows `http:` and `ws:` resources in active previews. Leave this disabled unless you trust the opened HTML and its network targets."
+          "markdownDescription": "Allows `http:` and `ws:` resources in active webview previews. Leave this disabled unless you trust the HTML and its network targets. Explicit Integrated Browser selection follows VS Code's own policy."
         }
       }
     },
@@ -114,13 +148,53 @@
           "command": "simpleHtmlViewer.openPreview",
           "when": "(resourceExtname == .html || resourceExtname == .htm) && activeCustomEditorId != simpleHtmlViewer.preview",
           "group": "navigation"
+        },
+        {
+          "command": "simpleHtmlViewer.zoomOut",
+          "when": "activeCustomEditorId == simpleHtmlViewer.preview",
+          "group": "navigation@1"
+        },
+        {
+          "command": "simpleHtmlViewer.zoomIn",
+          "when": "activeCustomEditorId == simpleHtmlViewer.preview",
+          "group": "navigation@2"
+        },
+        {
+          "command": "simpleHtmlViewer.refreshPreview",
+          "when": "activeCustomEditorId == simpleHtmlViewer.preview",
+          "group": "navigation@3"
+        },
+        {
+          "command": "simpleHtmlViewer.resetZoom",
+          "when": "activeCustomEditorId == simpleHtmlViewer.preview",
+          "group": "1_modification"
         }
       ]
     },
+    "keybindings": [
+      {
+        "command": "simpleHtmlViewer.zoomIn",
+        "key": "ctrl+=",
+        "mac": "cmd+=",
+        "when": "activeCustomEditorId == simpleHtmlViewer.preview && editorAreaFocus"
+      },
+      {
+        "command": "simpleHtmlViewer.zoomOut",
+        "key": "ctrl+-",
+        "mac": "cmd+-",
+        "when": "activeCustomEditorId == simpleHtmlViewer.preview && editorAreaFocus"
+      },
+      {
+        "command": "simpleHtmlViewer.resetZoom",
+        "key": "ctrl+0",
+        "mac": "cmd+0",
+        "when": "activeCustomEditorId == simpleHtmlViewer.preview && editorAreaFocus"
+      }
+    ],
     "customEditors": [
       {
         "viewType": "simpleHtmlViewer.preview",
-        "displayName": "Simple HTML Viewer",
+        "displayName": "HTML Preview",
         "selector": [
           {
             "filenamePattern": "*.html"
@@ -146,7 +220,7 @@
     "test:smoke": "npm run build && node test/smoke/runSmokeTests.js",
     "test:smoke:vsix": "npm run package:vsix && node test/smoke/runSmokeTests.js --vsix",
     "test:smoke:vsix:existing": "node test/smoke/runSmokeTests.js --vsix",
-    "test:unit": "npm run build && node test/previewTransform.test.js",
+    "test:unit": "npm run build && node test/previewTransform.test.js && node test/viewerRouter.test.js && node test/previewProvider.test.js",
     "vscode:prepublish": "npm run build"
   },
   "devDependencies": {

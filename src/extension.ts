@@ -1,8 +1,10 @@
 import * as vscode from 'vscode';
 import { HtmlPreviewProvider } from './previewProvider';
+import { activeHtmlResource, ViewerRouter } from './viewerRouter';
 
 export function activate(context: vscode.ExtensionContext): void {
   const provider = new HtmlPreviewProvider(context);
+  const router = new ViewerRouter();
 
   // Register the provider VS Code calls when an HTML file is opened with this
   // custom preview.
@@ -25,7 +27,7 @@ export function activate(context: vscode.ExtensionContext): void {
       async (resource?: vscode.Uri) => {
         // Context menus pass a resource; command-palette launches fall back to
         // whatever editor the user currently has active.
-        const target = resource ?? vscode.window.activeTextEditor?.document.uri;
+        const target = resource ?? activeHtmlResource();
         if (!target) {
           void vscode.window.showInformationMessage(
             'Open an HTML file to preview it.',
@@ -40,12 +42,7 @@ export function activate(context: vscode.ExtensionContext): void {
           return;
         }
 
-        await vscode.commands.executeCommand(
-          'vscode.openWith',
-          target,
-          HtmlPreviewProvider.viewType,
-          vscode.ViewColumn.Beside,
-        );
+        await router.open(target);
       },
     ),
   );
@@ -54,16 +51,30 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand(
       'simpleHtmlViewer.refreshPreview',
       async (resource?: vscode.Uri) => {
-        provider.refresh(
-          resource ?? vscode.window.activeTextEditor?.document.uri,
+        await provider.refresh(
+          resource ?? provider.getActivePreviewUri() ?? activeHtmlResource(),
         );
       },
+    ),
+    vscode.commands.registerCommand('simpleHtmlViewer.zoomIn', async () =>
+      provider.zoomIn(),
+    ),
+    vscode.commands.registerCommand('simpleHtmlViewer.zoomOut', async () =>
+      provider.zoomOut(),
+    ),
+    vscode.commands.registerCommand('simpleHtmlViewer.resetZoom', async () =>
+      provider.resetZoom(),
     ),
   );
 
   context.subscriptions.push(
     vscode.workspace.onDidSaveTextDocument((document) => {
       provider.handleDocumentSaved(document);
+    }),
+    vscode.workspace.onDidChangeConfiguration((event) => {
+      if (event.affectsConfiguration('simpleHtmlViewer.autoRefresh')) {
+        provider.handleConfigurationChanged();
+      }
     }),
   );
 

@@ -72,6 +72,13 @@ async function run() {
   });
   assert(commands.includes('simpleHtmlViewer.openPreview'));
   assert(commands.includes('simpleHtmlViewer.refreshPreview'));
+  assert(commands.includes('simpleHtmlViewer.zoomIn'));
+  assert(commands.includes('simpleHtmlViewer.zoomOut'));
+  assert(commands.includes('simpleHtmlViewer.resetZoom'));
+  assert.equal(
+    vscode.workspace.getConfiguration('simpleHtmlViewer').get('viewer'),
+    'webview',
+  );
 
   const workspaceRoot = vscode.workspace.workspaceFolders[0].uri;
   const targetUri = vscode.Uri.joinPath(

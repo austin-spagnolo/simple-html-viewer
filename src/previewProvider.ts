@@ -1,4 +1,6 @@
 import * as path from 'path';
+import { platform } from 'os';
+import { clearTimeout, setTimeout } from 'timers';
 import { TextDecoder } from 'util';
 import * as vscode from 'vscode';
 import {
@@ -7,7 +9,7 @@ import {
   wrapBodyContent,
 } from './previewTransform';
 
-type AutoRefreshMode = 'onSave' | 'off';
+type AutoRefreshMode = 'onSave' | 'onFileChange' | 'off';
 type ActiveContentMode = 'trustedWorkspaces' | 'always' | 'off';
 
 interface PreviewSecurityPolicy {
@@ -15,12 +17,13 @@ interface PreviewSecurityPolicy {
   insecureContentAllowed: boolean;
 }
 
-type WebviewMessage =
-  | { type: 'zoomIn' }
-  | { type: 'zoomOut' }
-  | { type: 'zoomReset' }
-  | { type: 'manualRefresh' }
-  | { type: 'ready' };
+interface PanelRenderState {
+  disposed: boolean;
+  pending: boolean;
+  revision: number;
+  running: Promise<void> | undefined;
+  uri: vscode.Uri;
+}
 
 export class HtmlPreviewProvider
   implements vscode.CustomReadonlyEditorProvider
@@ -29,8 +32,22 @@ export class HtmlPreviewProvider
   // A single HTML file can have several preview tabs open, so panel state is
   // grouped by URI instead of assuming one preview per document.
   private readonly panels = new Map<string, Set<vscode.WebviewPanel>>();
+  private readonly panelUris = new Map<vscode.WebviewPanel, vscode.Uri>();
+  private activePanel: vscode.WebviewPanel | undefined;
   private readonly renderCounts = new Map<string, number>();
   private readonly lastRenderedHtml = new Map<string, string>();
+  private readonly renderStates = new Map<
+    vscode.WebviewPanel,
+    PanelRenderState
+  >();
+  private readonly fileWatchers = new Map<
+    string,
+    {
+      watcher: vscode.FileSystemWatcher;
+      timer: ReturnType<typeof setTimeout> | undefined;
+      scheduleRefresh: () => void;
+    }
+  >();
 
   public constructor(private readonly context: vscode.ExtensionContext) {}
 
@@ -66,36 +83,28 @@ export class HtmlPreviewProvider
     webviewPanel.title = `${path.basename(document.uri.fsPath)} Preview`;
 
     this.registerPanel(document.uri, webviewPanel);
+    if (webviewPanel.active) {
+      this.activePanel = webviewPanel;
+    }
 
-    // The toolbar lives inside the webview, but zoom state is owned here so it
-    // survives refreshes and can be shared with every preview for the same file.
-    webviewPanel.webview.onDidReceiveMessage(
-      async (message: WebviewMessage) => {
-        switch (message.type) {
-          case 'manualRefresh':
-            await this.renderDocument(webviewPanel, document.uri);
-            break;
-          case 'zoomIn':
-            await this.adjustZoom(webviewPanel, document.uri, 1);
-            break;
-          case 'zoomOut':
-            await this.adjustZoom(webviewPanel, document.uri, -1);
-            break;
-          case 'zoomReset':
-            await this.setZoom(document.uri, this.getDefaultZoom());
-            await this.sendZoom(webviewPanel, document.uri);
-            break;
-          case 'ready':
-            await this.sendZoom(webviewPanel, document.uri);
-            break;
-          default:
-            break;
-        }
-      },
-    );
+    // Track focus so editor commands can target the preview the user is viewing.
+    webviewPanel.onDidChangeViewState((event) => {
+      if (event.webviewPanel.active) {
+        this.activePanel = webviewPanel;
+      } else if (this.activePanel === webviewPanel) {
+        this.activePanel = [...this.panelUris.keys()].find(
+          (panel) => panel.active,
+        );
+      }
+    });
 
     webviewPanel.onDidDispose(() => {
       this.unregisterPanel(document.uri, webviewPanel);
+      if (this.activePanel === webviewPanel) {
+        this.activePanel = [...this.panelUris.keys()].find(
+          (panel) => panel.active,
+        );
+      }
     });
 
     await this.renderDocument(webviewPanel, document.uri);
@@ -106,14 +115,37 @@ export class HtmlPreviewProvider
       return;
     }
 
-    if (this.getAutoRefreshMode() !== 'onSave') {
+    const mode = this.getAutoRefreshMode(document.uri);
+    if (mode === 'onFileChange') {
+      const state = this.fileWatchers.get(this.panelKey(document.uri));
+      if (state) {
+        state.scheduleRefresh();
+      } else {
+        void this.refresh(document.uri);
+      }
+      return;
+    }
+    if (mode !== 'onSave') {
       return;
     }
 
-    this.refresh(document.uri);
+    void this.refresh(document.uri);
   }
 
-  public refresh(uri: vscode.Uri | undefined): void {
+  /** Reconcile open-document watchers after autoRefresh configuration changes. */
+  public handleConfigurationChanged(): void {
+    for (const [key, panels] of this.panels) {
+      const uri = this.panelUris.get(
+        panels.values().next().value as vscode.WebviewPanel,
+      );
+      if (!uri) continue;
+      if (this.getAutoRefreshMode(uri) === 'onFileChange')
+        this.ensureFileWatcher(uri);
+      else this.disposeFileWatcher(key);
+    }
+  }
+
+  public async refresh(uri: vscode.Uri | undefined): Promise<void> {
     if (!uri) {
       return;
     }
@@ -124,9 +156,32 @@ export class HtmlPreviewProvider
       return;
     }
 
-    for (const panel of panels) {
-      void this.renderDocument(panel, uri);
+    await Promise.all([...panels].map((panel) => this.queueRender(panel, uri)));
+  }
+
+  /** URI of the currently focused custom preview, if one is open. */
+  public getActivePreviewUri(): vscode.Uri | undefined {
+    const panel = this.activePanel?.active
+      ? this.activePanel
+      : [...this.panelUris.keys()].find((candidate) => candidate.active);
+    return panel ? this.panelUris.get(panel) : undefined;
+  }
+
+  public async zoomIn(uri?: vscode.Uri): Promise<void> {
+    await this.adjustDocumentZoom(uri ?? this.getActivePreviewUri(), 1);
+  }
+
+  public async zoomOut(uri?: vscode.Uri): Promise<void> {
+    await this.adjustDocumentZoom(uri ?? this.getActivePreviewUri(), -1);
+  }
+
+  public async resetZoom(uri?: vscode.Uri): Promise<void> {
+    const targetUri = uri ?? this.getActivePreviewUri();
+    if (!targetUri) {
+      return;
     }
+    await this.setZoom(targetUri, this.getDefaultZoom(targetUri));
+    await this.sendZoomToDocumentPanels(targetUri);
   }
 
   public async testSetZoom(uri: vscode.Uri, zoom: number): Promise<void> {
@@ -159,6 +214,61 @@ export class HtmlPreviewProvider
     const panels = this.panels.get(key) ?? new Set<vscode.WebviewPanel>();
     panels.add(panel);
     this.panels.set(key, panels);
+    this.panelUris.set(panel, uri);
+    if (this.getAutoRefreshMode(uri) === 'onFileChange')
+      this.ensureFileWatcher(uri);
+  }
+
+  private ensureFileWatcher(uri: vscode.Uri): void {
+    const key = this.panelKey(uri);
+    if (this.fileWatchers.has(key) || !this.panels.has(key)) return;
+    const directory = vscode.Uri.joinPath(uri, '..');
+    const watcher = vscode.workspace.createFileSystemWatcher(
+      new vscode.RelativePattern(directory, '*'),
+    );
+    const state = {
+      watcher,
+      timer: undefined as ReturnType<typeof setTimeout> | undefined,
+      scheduleRefresh: (): void => undefined,
+    };
+    const schedule = () => {
+      if (state.timer) clearTimeout(state.timer);
+      state.timer = setTimeout(() => {
+        state.timer = undefined;
+        if (this.fileWatchers.get(key) === state) void this.refresh(uri);
+      }, 250);
+    };
+    state.scheduleRefresh = schedule;
+    const scheduleIfTarget = (changedUri: vscode.Uri) => {
+      if (this.isWatchedFile(uri, changedUri)) schedule();
+    };
+    watcher.onDidChange(scheduleIfTarget);
+    watcher.onDidCreate(scheduleIfTarget);
+    this.fileWatchers.set(key, state);
+  }
+
+  private isWatchedFile(target: vscode.Uri, changed: vscode.Uri): boolean {
+    if (
+      target.scheme !== changed.scheme ||
+      target.authority !== changed.authority
+    )
+      return false;
+    if (this.panelKey(target) === this.panelKey(changed)) return true;
+    if (
+      target.scheme === 'file' &&
+      (platform() === 'win32' || platform() === 'darwin')
+    ) {
+      return target.fsPath.toLowerCase() === changed.fsPath.toLowerCase();
+    }
+    return false;
+  }
+
+  private disposeFileWatcher(key: string): void {
+    const state = this.fileWatchers.get(key);
+    if (!state) return;
+    if (state.timer) clearTimeout(state.timer);
+    state.watcher.dispose();
+    this.fileWatchers.delete(key);
   }
 
   private unregisterPanel(uri: vscode.Uri, panel: vscode.WebviewPanel): void {
@@ -169,15 +279,71 @@ export class HtmlPreviewProvider
     }
 
     panels.delete(panel);
+    this.panelUris.delete(panel);
+    const renderState = this.renderStates.get(panel);
+    if (renderState) {
+      renderState.disposed = true;
+      renderState.pending = false;
+      this.renderStates.delete(panel);
+    }
     if (panels.size === 0) {
       this.panels.delete(key);
-    }
+      this.lastRenderedHtml.delete(key);
+      this.disposeFileWatcher(key);
+    } else if (this.getAutoRefreshMode(uri) === 'onFileChange')
+      this.ensureFileWatcher(uri);
   }
 
   private async renderDocument(
     panel: vscode.WebviewPanel,
     documentUri: vscode.Uri,
   ): Promise<void> {
+    await this.queueRender(panel, documentUri);
+  }
+
+  private queueRender(
+    panel: vscode.WebviewPanel,
+    documentUri: vscode.Uri,
+  ): Promise<void> {
+    let state = this.renderStates.get(panel);
+    if (!state) {
+      state = {
+        disposed: false,
+        pending: false,
+        revision: 0,
+        running: undefined,
+        uri: documentUri,
+      };
+      this.renderStates.set(panel, state);
+    }
+
+    state.uri = documentUri;
+    state.revision += 1;
+    state.pending = true;
+    if (!state.running) {
+      const activeState = state;
+      state.running = Promise.resolve().then(async () => {
+        try {
+          while (!activeState.disposed && activeState.pending) {
+            activeState.pending = false;
+            const revision = activeState.revision;
+            await this.renderDocumentOnce(panel, activeState, revision);
+          }
+        } finally {
+          activeState.running = undefined;
+        }
+      });
+    }
+
+    return state.running ?? Promise.resolve();
+  }
+
+  private async renderDocumentOnce(
+    panel: vscode.WebviewPanel,
+    state: PanelRenderState,
+    revision: number,
+  ): Promise<void> {
+    const documentUri = state.uri;
     try {
       // Render from the saved file each time. That keeps manual refresh and
       // auto-refresh behavior aligned with what is actually on disk.
@@ -189,11 +355,16 @@ export class HtmlPreviewProvider
         documentUri,
         sourceHtml,
         zoom,
-        this.getAutoRefreshMode(),
       );
+      if (!this.isCurrentRender(panel, state, revision)) {
+        return;
+      }
       panel.webview.html = renderedHtml;
       this.trackRender(documentUri, renderedHtml);
     } catch (error) {
+      if (!this.isCurrentRender(panel, state, revision)) {
+        return;
+      }
       const message = this.getErrorMessage(error);
       panel.webview.html = this.getErrorHtml(documentUri, message);
       void vscode.window.showWarningMessage(
@@ -204,17 +375,42 @@ export class HtmlPreviewProvider
     }
   }
 
-  private async adjustZoom(
+  private isCurrentRender(
     panel: vscode.WebviewPanel,
-    uri: vscode.Uri,
+    state: PanelRenderState,
+    revision: number,
+  ): boolean {
+    return (
+      !state.disposed &&
+      state.revision === revision &&
+      this.renderStates.get(panel) === state
+    );
+  }
+
+  private async adjustDocumentZoom(
+    uri: vscode.Uri | undefined,
     direction: 1 | -1,
   ): Promise<void> {
+    if (!uri) {
+      return;
+    }
     const nextZoom = Math.max(
       10,
-      Math.min(500, this.getStoredZoom(uri) + direction * this.getZoomStep()),
+      Math.min(
+        500,
+        this.getStoredZoom(uri) + direction * this.getZoomStep(uri),
+      ),
     );
     await this.setZoom(uri, nextZoom);
-    await this.sendZoom(panel, uri);
+    await this.sendZoomToDocumentPanels(uri);
+  }
+
+  private async sendZoomToDocumentPanels(uri: vscode.Uri): Promise<void> {
+    const panels = this.panels.get(this.panelKey(uri));
+    if (!panels) {
+      return;
+    }
+    await Promise.all([...panels].map((panel) => this.sendZoom(panel, uri)));
   }
 
   private async setZoom(uri: vscode.Uri, zoom: number): Promise<void> {
@@ -238,7 +434,9 @@ export class HtmlPreviewProvider
   private trackRender(uri: vscode.Uri, html: string): void {
     const key = this.panelKey(uri);
     this.renderCounts.set(key, (this.renderCounts.get(key) ?? 0) + 1);
-    this.lastRenderedHtml.set(key, html);
+    if (this.context.extensionMode === vscode.ExtensionMode.Test) {
+      this.lastRenderedHtml.set(key, html);
+    }
   }
 
   private zoomStateKey(uri: vscode.Uri): string {
@@ -248,42 +446,42 @@ export class HtmlPreviewProvider
   private getStoredZoom(uri: vscode.Uri): number {
     return this.context.workspaceState.get<number>(
       this.zoomStateKey(uri),
-      this.getDefaultZoom(),
+      this.getDefaultZoom(uri),
     );
   }
 
-  private getAutoRefreshMode(): AutoRefreshMode {
+  private getAutoRefreshMode(uri: vscode.Uri): AutoRefreshMode {
     return vscode.workspace
-      .getConfiguration('simpleHtmlViewer')
+      .getConfiguration('simpleHtmlViewer', uri)
       .get<AutoRefreshMode>('autoRefresh', 'onSave');
   }
 
-  private getZoomStep(): number {
+  private getZoomStep(uri: vscode.Uri): number {
     return vscode.workspace
-      .getConfiguration('simpleHtmlViewer')
+      .getConfiguration('simpleHtmlViewer', uri)
       .get<number>('zoomStep', 10);
   }
 
-  private getDefaultZoom(): number {
+  private getDefaultZoom(uri: vscode.Uri): number {
     return vscode.workspace
-      .getConfiguration('simpleHtmlViewer')
+      .getConfiguration('simpleHtmlViewer', uri)
       .get<number>('defaultZoom', 100);
   }
 
-  private getActiveContentMode(): ActiveContentMode {
+  private getActiveContentMode(uri: vscode.Uri): ActiveContentMode {
     return vscode.workspace
-      .getConfiguration('simpleHtmlViewer')
+      .getConfiguration('simpleHtmlViewer', uri)
       .get<ActiveContentMode>('activeContent', 'trustedWorkspaces');
   }
 
-  private getAllowInsecureContent(): boolean {
+  private getAllowInsecureContent(uri: vscode.Uri): boolean {
     return vscode.workspace
-      .getConfiguration('simpleHtmlViewer')
+      .getConfiguration('simpleHtmlViewer', uri)
       .get<boolean>('allowInsecureContent', false);
   }
 
-  private getPreviewSecurityPolicy(): PreviewSecurityPolicy {
-    const activeContentMode = this.getActiveContentMode();
+  private getPreviewSecurityPolicy(uri: vscode.Uri): PreviewSecurityPolicy {
+    const activeContentMode = this.getActiveContentMode(uri);
     // Running page scripts is a trust boundary, so only allow it when the user
     // opted in or the workspace is already trusted.
     const activeContentAllowed =
@@ -293,12 +491,16 @@ export class HtmlPreviewProvider
     return {
       activeContentAllowed,
       insecureContentAllowed:
-        activeContentAllowed && this.getAllowInsecureContent(),
+        activeContentAllowed && this.getAllowInsecureContent(uri),
     };
   }
 
-  private createPreviewCsp(webview: vscode.Webview, nonce: string): string {
-    const securityPolicy = this.getPreviewSecurityPolicy();
+  private createPreviewCsp(
+    webview: vscode.Webview,
+    nonce: string,
+    uri: vscode.Uri,
+  ): string {
+    const securityPolicy = this.getPreviewSecurityPolicy(uri);
     const localSource = webview.cspSource;
     // Keep each CSP directive's source list explicit so changes to one kind of
     // access do not accidentally widen another.
@@ -371,6 +573,7 @@ export class HtmlPreviewProvider
         `<meta http-equiv="Content-Security-Policy" content="${this.createPreviewCsp(
           webview,
           nonce,
+          documentUri,
         )}">`,
         '<meta name="color-scheme" content="light">',
         '<style>:root{color-scheme:only light;}html,body{color:CanvasText;background-color:Canvas;}</style>',
@@ -387,7 +590,6 @@ export class HtmlPreviewProvider
     documentUri: vscode.Uri,
     sourceHtml: string,
     zoom: number,
-    autoRefreshMode: AutoRefreshMode,
   ): Promise<string> {
     const nonce = this.createNonce();
     const stylesUri = webview.asWebviewUri(
@@ -399,32 +601,17 @@ export class HtmlPreviewProvider
       sourceHtml,
       nonce,
     );
-    // The toolbar is injected into the real document body instead of using an
-    // iframe, which lets page scripts and libraries run in their expected DOM.
-    const toolbarPrefix = `
-<div id="simple-html-viewer-root">
-  <div id="simple-html-viewer-toolbar" data-simple-html-viewer-toolbar>
-    <button id="simple-html-viewer-zoom-out" class="simple-html-viewer-button" type="button" aria-label="Zoom out">-</button>
-    <div id="simple-html-viewer-zoom-label" class="simple-html-viewer-zoom-label">${zoom}%</div>
-    <button id="simple-html-viewer-zoom-in" class="simple-html-viewer-button" type="button" aria-label="Zoom in">+</button>
-    <button id="simple-html-viewer-zoom-reset" class="simple-html-viewer-button" type="button">reset</button>
-    <button id="simple-html-viewer-refresh" class="simple-html-viewer-button${
-      autoRefreshMode === 'off' ? '' : ' hidden'
-    }" type="button">refresh</button>
-  </div>
-</div>
-<div id="simple-html-viewer-offset" aria-hidden="true"></div>
+    // Keep only a wrapper for zoom scaling. Viewer controls are supplied by
+    // VS Code commands so artifact content cannot cover or alter them.
+    const wrapperPrefix = `
 <div id="simple-html-viewer-content-shell">
   <div id="simple-html-viewer-content">
 `;
-    const toolbarSuffix = `
+    const wrapperSuffix = `
   </div>
 </div>
 <script nonce="${nonce}">
-  const vscode = acquireVsCodeApi();
-  const zoomLabel = document.getElementById('simple-html-viewer-zoom-label');
-  const root = document.getElementById('simple-html-viewer-root');
-  const offset = document.getElementById('simple-html-viewer-offset');
+(() => {
   const contentShell = document.getElementById('simple-html-viewer-content-shell');
   const content = document.getElementById('simple-html-viewer-content');
   const syncContentBounds = () => {
@@ -436,22 +623,6 @@ export class HtmlPreviewProvider
     // the scaled content height to keep scrolling natural.
     contentShell.style.height = String(Math.ceil(content.getBoundingClientRect().height)) + 'px';
   };
-  const applyLayoutOffset = () => {
-    if (!(root instanceof HTMLElement) || !(offset instanceof HTMLElement)) {
-      return;
-    }
-
-    // Reserve space for the fixed toolbar so it does not cover the top of the
-    // page, and make in-page anchor jumps land below it.
-    const rootStyle = window.getComputedStyle(root);
-    const reservedHeight =
-      Math.ceil(root.getBoundingClientRect().height) +
-      parseFloat(rootStyle.top || '0') +
-      8;
-    offset.style.height = String(reservedHeight) + 'px';
-    document.documentElement.style.scrollPaddingTop =
-      String(reservedHeight) + 'px';
-  };
   const notifyResponsiveLayout = () => {
     const dispatchResize = () => {
       window.dispatchEvent(new Event('resize'));
@@ -461,7 +632,6 @@ export class HtmlPreviewProvider
     // transform has settled instead of immediately after changing the style.
     requestAnimationFrame(() => {
       syncContentBounds();
-      applyLayoutOffset();
       dispatchResize();
       requestAnimationFrame(() => {
         syncContentBounds();
@@ -477,25 +647,8 @@ export class HtmlPreviewProvider
       content.style.width = value === 100 ? '' : String(100 / scale) + '%';
     }
 
-    zoomLabel.textContent = value + '%';
     notifyResponsiveLayout();
   };
-
-  document.getElementById('simple-html-viewer-zoom-out')?.addEventListener('click', () => {
-    vscode.postMessage({ type: 'zoomOut' });
-  });
-
-  document.getElementById('simple-html-viewer-zoom-in')?.addEventListener('click', () => {
-    vscode.postMessage({ type: 'zoomIn' });
-  });
-
-  document.getElementById('simple-html-viewer-zoom-reset')?.addEventListener('click', () => {
-    vscode.postMessage({ type: 'zoomReset' });
-  });
-
-  document.getElementById('simple-html-viewer-refresh')?.addEventListener('click', () => {
-    vscode.postMessage({ type: 'manualRefresh' });
-  });
 
   window.addEventListener('message', (event) => {
     const message = event.data;
@@ -511,24 +664,23 @@ export class HtmlPreviewProvider
     resizeObserver.observe(content);
   }
 
-  const syncChromeLayout = () => {
+  const syncDocumentLayout = () => {
     syncContentBounds();
-    applyLayoutOffset();
   };
 
-  window.addEventListener('load', syncChromeLayout);
-  window.addEventListener('resize', syncChromeLayout);
-  requestAnimationFrame(syncChromeLayout);
+  window.addEventListener('load', syncDocumentLayout);
+  window.addEventListener('resize', syncDocumentLayout);
+  requestAnimationFrame(syncDocumentLayout);
 
   applyZoom(${zoom});
-  vscode.postMessage({ type: 'ready' });
+})();
 </script>
 `;
 
     const wrappedHtml = wrapBodyContent(
       preparedHtml,
-      toolbarPrefix,
-      toolbarSuffix,
+      wrapperPrefix,
+      wrapperSuffix,
     );
 
     return injectIntoHead(
