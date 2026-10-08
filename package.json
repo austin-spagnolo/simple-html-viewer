@@ -221,7 +221,8 @@
     "test:smoke:vsix": "npm run package:vsix && node test/smoke/runSmokeTests.js --vsix",
     "test:smoke:vsix:existing": "node test/smoke/runSmokeTests.js --vsix",
     "test:unit": "npm run build && node test/previewTransform.test.js && node test/viewerRouter.test.js && node test/previewProvider.test.js",
-    "vscode:prepublish": "npm run build"
+    "vscode:prepublish": "npm run build",
+    "test:release": "node --test .github/scripts/publish-registry.test.js"
   },
   "devDependencies": {
     "@types/node": "^22.13.10",
@@ -232,6 +233,7 @@
     "@vscode/vsce": "^3.2.2",
     "eslint": "^9.22.0",
     "eslint-config-prettier": "^10.0.1",
+    "ovsx": "1.2.0",
     "prettier": "^3.5.3",
     "typescript": "^5.8.2"
   }

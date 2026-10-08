@@ -30,6 +30,9 @@ jobs:
       - name: Unit tests
         run: npm run test
 
+      - name: Release workflow tests
+        run: npm run test:release
+
       - name: Smoke tests
         run: xvfb-run -a npm run test:smoke
 
